@@ -25,3 +25,7 @@ circlemud  | /usr/local/bin/docker-entrypoint.sh: 5: [!: not found
 ```zsh
 if [
 ```
+
+## Gameplay
+
+- TUI based game do not have an understanding of relative nearness i.e. at the start, the banner mentiones.."An automatic teller machine has been installed in the wall here" but are we close to the wall or close to the paintings on the wall?
