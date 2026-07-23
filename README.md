@@ -8,19 +8,22 @@
 
 - Install dependencies:
 
-  ```zsh
-      pnpm -i
-  ```
+```zsh
+    pnpm -i
+```
 
 - Install docker (from the official website)
 
 ## Start
 
 - To start the container:
-  ```zsh
-      docker compose up --build
-  ```
+
+```zsh
+    docker compose up --build
+```
+
 - Telnet or nc to port 4000
-  ```zsh
-      telnet localhost 4000
-  ```
+
+```zsh
+    telnet localhost 4000
+```
