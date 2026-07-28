@@ -57,9 +57,9 @@ def bitvector_number_to_numbers(value: int) -> Iterator[int]:
 
 def bitvector_to_numbers(value: int | str) -> list[int]:
     """Convert a bitvector (numeric or letter-based) to list of flag values."""
-    if isinstance(value, int):
-        return list(bitvector_number_to_numbers(value))
-    return list(bitvector_letters_to_numbers(value))
+    if isinstance(value, int) or (isinstance(value, str) and value.isdigit()):
+        return list(bitvector_number_to_numbers(int(value)))
+    return list(bitvector_letters_to_numbers(str(value)))
 
 
 def _lookup_enum(value: int, enum_cls: FlagEnum) -> str | None:
@@ -103,7 +103,7 @@ def split_on_vnums(file_text: str) -> Iterator[str]:
 
     This is important because lines within entries can (and do) start with '#'.
     """
-    pattern = re.compile(r'^#(\d+)', re.MULTILINE)
+    pattern = re.compile(r'^#(\d+)(?=\s|$)', re.MULTILINE)
     pieces = pattern.split(file_text)
     for vnum, text in zip(pieces[1::2], pieces[2::2]):
         yield vnum + text

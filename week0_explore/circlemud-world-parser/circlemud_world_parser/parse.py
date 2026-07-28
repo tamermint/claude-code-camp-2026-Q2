@@ -64,20 +64,49 @@ def parse_based_on_filepath(filepath):
 
 @app.command()
 def parse(
-    src: str = typer.Argument(..., help="source file to parse"),
-    dest: Optional[str] = typer.Option(None, help="output to file"),
+    src: str = typer.Option(..., help="source directory containing world files"),
+    dest: str = typer.Option(..., help="destination directory for json output"),
 ):
-    payload, errors = parse_based_on_filepath(src)
-    log_errors(errors)
+    src_path = Path(src)
+    dest_path = Path(dest)
+    
+    total_files = 0
+    errors_encountered = 0
 
-    payload_dicts = [item.model_dump() for item in payload]
-    payload_json = json.dumps(payload_dicts, indent=2, sort_keys=True)
+    for file_path in src_path.rglob('*'):
+        if not file_path.is_file():
+            continue
+            
+        file_type = get_file_type(file_path)
+        if file_type not in PARSER_LOOKUP:
+            continue
 
-    if dest:
-        with open(dest, 'w') as f:
-            f.write(payload_json)
-    else:
-        print(payload_json)
+        total_files += 1
+        print(f"Parsing: {file_path.name}")
+        
+        try:
+            payload, errors = parse_based_on_filepath(file_path)
+            if errors:
+                log_errors(errors)
+                errors_encountered += len(errors)
+
+            if payload:
+                payload_dicts = [item.model_dump() for item in payload]
+                payload_json = json.dumps(payload_dicts, indent=2, sort_keys=True)
+                
+                # Create subfolder and write file
+                out_dir = dest_path / file_type
+                out_dir.mkdir(parents=True, exist_ok=True)
+                
+                out_file = out_dir / f"{file_path.stem}.json"
+                with open(out_file, 'w') as f:
+                    f.write(payload_json)
+                    
+        except Exception as e:
+            print(f"CRITICAL ERROR parsing {file_path.name}: {e}")
+            errors_encountered += 1
+            
+    print(f"\nBatch Complete. Processed {total_files} files with {errors_encountered} extraction errors.")
 
 
 if __name__ == '__main__':

@@ -8,11 +8,7 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = [
-    "pydantic>=2.12.5",
-    "pytest>=9.0.2",
-    "typer>=0.21.1",
-]
+dependencies = ["pydantic>=2.12.5", "pytest>=9.0.2", "typer>=0.21.1"]
 
 [project.scripts]
 circlemud-parse = "circlemud_world_parser.parse:app"
@@ -21,9 +17,7 @@ circlemud-parse = "circlemud_world_parser.parse:app"
 line-length = 120
 
 [dependency-groups]
-dev = [
-    "flake8>=7.3.0",
-    "isort>=7.0.0",
-    "ruff>=0.14.14",
-    "ty>=0.0.13",
-]
+dev = ["flake8>=7.3.0", "isort>=7.0.0", "ruff>=0.14.14", "ty>=0.0.13"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["circlemud_world_parser"]

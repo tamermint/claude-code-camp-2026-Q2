@@ -3,7 +3,8 @@ from pydantic import BaseModel, Field
 from .constants import (ObjectAffectLocation, ObjectExtraEffect, ObjectType,
                         ObjectWear)
 from .models import ExtraDescription, Flag
-from .utils import _lookup_enum, lookup_value_to_dict, parse_flags
+from .utils import _lookup_enum, lookup_value_to_dict, parse_flags, bitvector_to_numbers
+import re
 
 
 class Affect(BaseModel):
@@ -65,40 +66,65 @@ class Object(BaseModel):
     @classmethod
     def from_text(cls, text: str) -> "Object":
         """Parse a CircleMUD object definition from raw text."""
-        fields = [line.rstrip() for line in text.strip().split('\n')]
+        text = text.strip()
 
-        # easy fields
-        obj_id = int(fields[0])
-        aliases = fields[1].rstrip('~').split()
-        short_desc = fields[2].rstrip('~')
-        long_desc = fields[3].rstrip('~')
-        values = [int(v) for v in fields[6].split()]
-        weight, cost, rent = (int(v) for v in fields[7].split()[:3])
+        # 1. Extract VNUM safely, ignoring inline builder comments
+        match_vnum = re.match(r"^(\d+)(.*)", text, re.DOTALL)
+        if not match_vnum:
+            raise ValueError("Could not extract VNUM from block")
+        
+        obj_id = int(match_vnum.group(1))
+        remainder = match_vnum.group(2).strip()
 
-        vector_fields = fields[5].split()
+        # 2. Extract the 4 strings using stateful regex, bypassing internal newlines
+        match = re.match(r"(.*?)~(.*?)~(.*?)~(.*?)~", remainder, re.DOTALL)
+        if not match:
+            raise ValueError(f"Failed to find 4 tilde delimiters in object {obj_id}")
+
+        aliases = match.group(1).strip().split()
+        short_desc = match.group(2).strip()
+        long_desc = match.group(3).strip()
+        action_desc = match.group(4).strip() or None
+
+        # 3. Process the remaining numerical and flag lines
+        post_desc = remainder[match.end():].strip()
+        fields = [line.rstrip() for line in post_desc.split('\n')]
+
+        vector_fields = fields[0].split()
         type_flag = vector_fields[0]
         effects_bits = vector_fields[1] if len(vector_fields) > 1 else "0"
         wear_bitvector = vector_fields[5] if len(vector_fields) > 5 else vector_fields[-1]
 
-        # type flag is always an int
         type_dict = lookup_value_to_dict(int(type_flag), ObjectType)
         obj_type = Flag(**type_dict)
 
-        # parse the bitvectors
         effects = parse_flags(effects_bits, ObjectExtraEffect)
         wear = parse_flags(wear_bitvector, ObjectWear)
 
-        action_desc = fields[4].rstrip('~') or None
+        # 4. Safely extract values using the bitvector fix
+        raw_values = fields[1].split()
+        values = []
+        for v in raw_values:
+            if v.isdigit() or (v.startswith('-') and v[1:].isdigit()):
+                values.append(int(v))
+            else:
+                decoded = sum(bitvector_to_numbers(v))
+                values.append(decoded)
 
+        # 5. Extract weight, cost, rent
+        weight, cost, rent = (int(v) for v in fields[2].split()[:3])
+
+        # 6. Pass the remaining lines to the Affect/ExtraDesc parsers
         affects = []
         extra_descs = []
-        if len(fields) > 8:
-            extra_fields = fields[8:]
+        if len(fields) > 3:
+            extra_fields = fields[3:]
             affects = Affect.from_fields(extra_fields)
             extra_descs = parse_extra_descriptions_from_fields(extra_fields)
+            
         triggers = [
             int(field.split()[1])
-            for field in fields[8:]
+            for field in fields[3:]
             if field.startswith("T ") and len(field.split()) > 1
         ]
 

@@ -97,38 +97,59 @@ class Shop(BaseModel):
 
     @classmethod
     def from_text(cls, text: str) -> "Shop":
-        """Parse a CircleMUD shop definition from raw text."""
+        """Parse a CircleMUD shop definition using a sequential pointer."""
         fields = [line.rstrip() for line in text.strip().split('\n')]
-        delimiters = [i for i, field in enumerate(fields) if field == '-1']
-
+        
         shop_id = int(fields[0].lstrip('#').rstrip('~'))
-
-        objects_start, objects_stop = 1, delimiters[0]
-        objects = [int(f) for f in fields[objects_start:objects_stop]]
-
-        sell_rate = float(fields[objects_stop + 1])
-        buy_rate = float(fields[objects_stop + 2])
-
-        types_start, types_stop = objects_stop + 3, delimiters[1]
-        buy_types = [BuyType.from_line(t) for t in fields[types_start:types_stop]]
-
-        messages_start, messages_stop = delimiters[1] + 1, delimiters[1] + 8
-        messages = ShopMessages.from_list(fields[messages_start:messages_stop])
-
-        temper = int(fields[messages_stop])
-
-        flags = parse_flags(fields[messages_stop + 1], ShopFlag)
-
-        shopkeeper = int(fields[messages_stop + 2])
-
-        trades_with = parse_flags(fields[messages_stop + 3], ShopTradesWith)
-
-        rooms_start, rooms_stop = messages_stop + 4, delimiters[2]
-        rooms = [int(r) for r in fields[rooms_start:rooms_stop]]
-
-        times_raw = [int(t) for t in fields[rooms_stop + 1:]]
-        if len(times_raw) != 4:
-            raise ValueError('Unexpected number of open/close times')
+        ptr = 1
+        
+        # 1. Extract Objects
+        objects = []
+        while ptr < len(fields) and fields[ptr] != '-1':
+            objects.append(int(fields[ptr]))
+            ptr += 1
+        ptr += 1  # Step over the '-1'
+        
+        # 2. Extract Rates
+        sell_rate = float(fields[ptr])
+        buy_rate = float(fields[ptr + 1])
+        ptr += 2
+        
+        # 3. Extract Buy Types
+        buy_types = []
+        while ptr < len(fields) and fields[ptr] != '-1':
+            buy_types.append(BuyType.from_line(fields[ptr]))
+            ptr += 1
+        ptr += 1  # Step over the '-1'
+        
+        # 4. Extract Messages
+        messages = ShopMessages.from_list(fields[ptr:ptr+7])
+        ptr += 7
+        
+        # 5. Extract Fixed Fields (Ignores -1 collisions)
+        temper = int(fields[ptr])
+        flags = parse_flags(fields[ptr + 1], ShopFlag)
+        shopkeeper = int(fields[ptr + 2])
+        trades_with = parse_flags(fields[ptr + 3], ShopTradesWith)
+        ptr += 4
+        
+        # 6. Extract Rooms
+        rooms = []
+        while ptr < len(fields) and fields[ptr] != '-1':
+            rooms.append(int(fields[ptr]))
+            ptr += 1
+        ptr += 1  # Step over the '-1'
+        
+        # 7. Resiliently Extract Times (Pad with defaults if missing)
+        times_raw = []
+        while ptr < len(fields):
+            if fields[ptr].strip():
+                times_raw.append(int(fields[ptr]))
+            ptr += 1
+            
+        while len(times_raw) < 4:
+            times_raw.extend([0, 28])
+            
         times = [
             OpeningHours(open=times_raw[0], close=times_raw[1]),
             OpeningHours(open=times_raw[2], close=times_raw[3]),

@@ -77,23 +77,45 @@ class Room(BaseModel):
     @classmethod
     def from_text(cls, text: str) -> "Room":
         """Parse a CircleMUD room definition from raw text."""
-        parts = text.split('~')
-        vnum, name = parts[0].split('\n')
-        desc = parts[1].strip()
-        vector_fields = parts[2].strip().split('\n')[0].strip().split()
+        import re
+        text = text.strip()
+        
+        # 1. Extract VNUM safely, ignoring inline builder comments
+        match_vnum = re.match(r"^(\d+)(?:\s+|$)(.*)", text, re.DOTALL)
+        if not match_vnum:
+            raise ValueError("Could not extract VNUM from block")
+        
+        vnum = int(match_vnum.group(1))
+        remainder = match_vnum.group(2).strip()
+        
+        # 2. Extract Name and Description using stateful regex
+        match = re.match(r"(.*?)~(.*?)~", remainder, re.DOTALL)
+        if not match:
+            raise ValueError(f"Failed to find tilde delimiters in room {vnum}")
+            
+        name = match.group(1).strip()
+        desc = match.group(2).strip()
+        
+        # 3. Process the numeric line that immediately follows the description
+        post_desc = remainder[match.end():].strip()
+        lines = post_desc.split('\n')
+        vector_fields = lines[0].split()
+        
         zone = vector_fields[0]
         flags_raw = vector_fields[1] if len(vector_fields) > 1 else "0"
-        sector = vector_fields[-1]
-
+        sector = vector_fields[-1] if len(vector_fields) > 2 else "0"
+        
         flags_clean = clean_bitvector(flags_raw)
         flags = parse_flags(flags_raw, RoomFlag) if flags_clean else []
-
+        
         sector_dict = lookup_value_to_dict(int(sector), RoomSectorType)
         sector_type = Flag(**sector_dict)
-
-        bottom_matter = '~'.join(parts[2:])
+        
+        # 4. Process the bottom matter (Exits, Extra Descriptions, Triggers)
+        bottom_matter = '\n'.join(lines[1:])
         exits = Exit.from_text(bottom_matter)
         extra_descs = cls.parse_extra_descriptions_from_text(bottom_matter)
+        
         triggers = [
             int(line.split()[1])
             for line in bottom_matter.splitlines()
@@ -101,9 +123,9 @@ class Room(BaseModel):
         ]
 
         return cls(
-            id=int(vnum),
-            name=name.strip(),
-            desc=desc.strip('\n'),
+            id=vnum,
+            name=name,
+            desc=desc,
             zone_number=int(zone),
             flags=flags,
             sector_type=sector_type,
