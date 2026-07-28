@@ -103,7 +103,7 @@ def split_on_vnums(file_text: str) -> Iterator[str]:
 
     This is important because lines within entries can (and do) start with '#'.
     """
-    pattern = re.compile(r'^#(\d+)(?=\s|$)', re.MULTILINE)
+    pattern = re.compile(r'^#(\d+)(?=\s|$|~)', re.MULTILINE)
     pieces = pattern.split(file_text)
     for vnum, text in zip(pieces[1::2], pieces[2::2]):
         yield vnum + text

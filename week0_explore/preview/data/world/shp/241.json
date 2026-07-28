@@ -1,0 +1,61 @@
+[
+  {
+    "buy_rate": 0.5,
+    "buy_types": [
+      {
+        "namelist": null,
+        "note": "0",
+        "value": null
+      }
+    ],
+    "flags": [
+      {
+        "note": "WILL_START_FIGHT",
+        "value": 1
+      },
+      {
+        "note": "WILL_BANK_MONEY",
+        "value": 2
+      },
+      {
+        "note": null,
+        "value": 4
+      }
+    ],
+    "id": 24100,
+    "messages": {
+      "buy_fails_object_does_not_exist": "I'm sorry, but I don't have that right now!",
+      "buy_fails_player_cannot_afford_object": "You don't have the money, stranger.",
+      "buy_succeeds": "That will cost you %d coins. Enjoy your drink.",
+      "sell_fails_object_does_not_exist": "I don't want to buy anything from you.",
+      "sell_fails_shop_cannot_afford_object": "I don't want to buy anything from you.",
+      "sell_fails_shop_does_not_buy_object": "I don't want to buy anything from you.",
+      "sell_succeeds": "I don't want to buy anything from you."
+    },
+    "objects": [
+      24120,
+      24121,
+      24122,
+      24123,
+      24124,
+      24125
+    ],
+    "rooms": [
+      24121
+    ],
+    "sell_rate": 2.0,
+    "shopkeeper": 24107,
+    "temper": -1,
+    "times": [
+      {
+        "close": 28,
+        "open": 0
+      },
+      {
+        "close": 0,
+        "open": 0
+      }
+    ],
+    "trades_with": []
+  }
+]

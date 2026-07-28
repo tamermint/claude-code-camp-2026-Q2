@@ -57,7 +57,7 @@
 
   - `parser.py` fix:
 
-    ````python
+    ```python
     def parse(
     src: str = typer.Option(..., help="source directory containing world files"),
     dest: str = typer.Option(..., help="destination directory for json output"),
@@ -102,5 +102,12 @@
                 errors_encountered += 1
 
         print(f"\nBatch Complete. Processed {total_files} files with {errors_encountered} extraction errors.")
-        ```
-    ````
+    ```
+
+  - `utils.py` fix:
+    ```python
+        `pattern = re.compile(r'^#(\d+)(?=\s|$|~)', re.MULTILINE)`
+        pieces = pattern.split(file_text)
+        for vnum, text in zip(pieces[1::2], pieces[2::2]):
+            yield vnum + text
+    ```
