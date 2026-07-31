@@ -1,0 +1,30 @@
+#!/usr/bin/expect -f
+set timeout 20
+spawn telnet localhost 4000
+
+expect "By what name do you wish to be known?"
+send "dummy\r"
+
+expect "Password:"
+send "helloworld\r"
+
+# After logging in, MUDs typically show a MOTD and then a prompt.
+expect "*** PRESS RETURN:"
+send "\r"
+
+# Wait for the menu and select "1" to enter the game
+expect "Make your choice:"
+send "1\r"
+
+# Give the game a moment to load the room
+sleep 3
+
+# Send the command
+expect ">"
+send "[lindex $argv 0]\r"
+
+# Wait for the output of the command
+# The prompt is something like "22H 100M 85V (news) (motd) >"
+expect -re {(\r\n.+?)\r\n[0-9]+H [0-9]+M [0-9]+V \(.*\) >}
+# Send the output to stdout
+puts $expect_out(1,string)

@@ -111,3 +111,15 @@
         for vnum, text in zip(pieces[1::2], pieces[2::2]):
             yield vnum + text
     ```
+
+## Agent Architecture Exploration
+
+### 01_plain agent
+
+Observations:
+
+- Using 01_plain agent architecture, the bot read the game infrastructure files and then gave me the answer. It did not actually play the game. It somehow was unable to understand instructions properly at medium thinking level
+
+- Coding harness needs actual commands and instructions to properly telnet to the tbaMUD server and play the game.
+
+- At thinking level high, the agent created a find_path.py script to find shortest path and used a python script to play the game
