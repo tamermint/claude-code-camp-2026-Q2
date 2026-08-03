@@ -1,125 +1,55 @@
-- tbaMUD raw world files have builder typos so I had to work with gemini to fix the parser logic. The `convert-world.sh` script needed to be changed as well. My OS memory was getting exhausted due to multiple uv runs in the .venv of circlemud-world-parser.
-  - `room.py` fix:
-
-    ```python
-          import re
-    text = text.strip()
-
-    # 1. Extract VNUM safely, ignoring inline builder comments
-    match_vnum = re.match(r"^(\d+)(?:\s+|$)(.*)", text, re.DOTALL)
-    if not match_vnum:
-        raise ValueError("Could not extract VNUM from block")
-
-    vnum = int(match_vnum.group(1))
-    remainder = match_vnum.group(2).strip()
-
-    # 2. Extract Name and Description using stateful regex
-    match = re.match(r"(.*?)~(.*?)~", remainder, re.DOTALL)
-    if not match:
-        raise ValueError(f"Failed to find tilde delimiters in room {vnum}")
-
-    name = match.group(1).strip()
-    desc = match.group(2).strip()
-
-    # 3. Process the numeric line that immediately follows the description
-    post_desc = remainder[match.end():].strip()
-    lines = post_desc.split('\n')
-    vector_fields = lines[0].split()
-    ```
-
-  - `object.py` fix:
-
-    ```python
-           text = text.strip()
-
-        # 1. Extract VNUM safely, ignoring inline builder comments
-        match_vnum = re.match(r"^(\d+)(.*)", text, re.DOTALL)
-        if not match_vnum:
-            raise ValueError("Could not extract VNUM from block")
-
-        obj_id = int(match_vnum.group(1))
-        remainder = match_vnum.group(2).strip()
-
-        # 2. Extract the 4 strings using stateful regex, bypassing internal newlines
-        match = re.match(r"(.*?)~(.*?)~(.*?)~(.*?)~", remainder, re.DOTALL)
-        if not match:
-            raise ValueError(f"Failed to find 4 tilde delimiters in object {obj_id}")
-
-        aliases = match.group(1).strip().split()
-        short_desc = match.group(2).strip()
-        long_desc = match.group(3).strip()
-        action_desc = match.group(4).strip() or None
-
-        # 3. Process the remaining numerical and flag lines
-        post_desc = remainder[match.end():].strip()
-        fields = [line.rstrip() for line in post_desc.split('\n')]
-    ```
-
-  - `parser.py` fix:
-
-    ```python
-    def parse(
-    src: str = typer.Option(..., help="source directory containing world files"),
-    dest: str = typer.Option(..., help="destination directory for json output"),
-    ):
-    src_path = Path(src)
-    dest_path = Path(dest)
-
-        total_files = 0
-        errors_encountered = 0
-
-        for file_path in src_path.rglob('*'):
-            if not file_path.is_file():
-                continue
-
-            file_type = get_file_type(file_path)
-            if file_type not in PARSER_LOOKUP:
-                continue
-
-            total_files += 1
-            print(f"Parsing: {file_path.name}")
-
-            try:
-                payload, errors = parse_based_on_filepath(file_path)
-                if errors:
-                    log_errors(errors)
-                    errors_encountered += len(errors)
-
-                if payload:
-                    payload_dicts = [item.model_dump() for item in payload]
-                    payload_json = json.dumps(payload_dicts, indent=2, sort_keys=True)
-
-                    # Create subfolder and write file
-                    out_dir = dest_path / file_type
-                    out_dir.mkdir(parents=True, exist_ok=True)
-
-                    out_file = out_dir / f"{file_path.stem}.json"
-                    with open(out_file, 'w') as f:
-                        f.write(payload_json)
-
-            except Exception as e:
-                print(f"CRITICAL ERROR parsing {file_path.name}: {e}")
-                errors_encountered += 1
-
-        print(f"\nBatch Complete. Processed {total_files} files with {errors_encountered} extraction errors.")
-    ```
-
-  - `utils.py` fix:
-    ```python
-        `pattern = re.compile(r'^#(\d+)(?=\s|$|~)', re.MULTILINE)`
-        pieces = pattern.split(file_text)
-        for vnum, text in zip(pieces[1::2], pieces[2::2]):
-            yield vnum + text
-    ```
-
 ## Agent Architecture Exploration
 
-### 01_plain agent
+## 1. An agent file with referenced files i.e. GEMINI.md, @~/docs/\*.md
 
-Observations:
+The simplest architecture exploration is creating an agent file e.g. `GEMINI.md` or whichever coding harness is used and then importing other files if needed
 
-- Using 01_plain agent architecture, the bot read the game infrastructure files and then gave me the answer. It did not actually play the game. It somehow was unable to understand instructions properly at medium thinking level
+We should attempt to create an agent file and check if it can connect to the MUD and complete a simple goal e.g. 'Find the bakery and list items on the menu'
 
-- Coding harness needs actual commands and instructions to properly telnet to the tbaMUD server and play the game.
+We should use the smallest model or lower thinking effort and then scale up. P.S. for gemini, thinking effort low creates an unusable agent which is unable to persist focus on task
 
-- At thinking level high, the agent created a find_path.py script to find shortest path and used a python script to play the game
+### Technical Observations:
+
+Using Gemini Flash 3.5 thinking effort medium, we created a GEMINI.md with a simple prompt and told that it will need to manager its own local memory via simple markdown files. We provided it location of the MUD and player credentials.
+
+- At thinking level medium, the agent created python scripts to create socket connection and execute commands though it wasn't perfect and it could not persist the socket connection
+
+- At thinking level high, the agent adjusted the python scripts for socket connection to persist in the same shell session and then created a find_path.py script to find shortest path and used a python script to play the game:
+
+```sh
+   I have successfully executed the instructions from your GEMINI.md:
+
+   1. Found Route: Calculated the shortest path from The Temple of Midgaard (vnum 3001) to The Bakery (vnum 3009):
+      - Go south to The Temple Square (vnum 3005)
+      - Go south to Market Square (vnum 3014)
+      - Go west to Main Street (vnum 3013)
+      - Go north to The Bakery (vnum 3009)
+
+   2. Automated the Agent: Created and ran run_agent.py to:
+      - Log into the MUD game as dummy / helloworld.
+      - Send the step-by-step movement directions to reach the Bakery.
+      - Execute the list command to extract the menu.
+
+   3. Retrieved Menu:
+      - A danish pastry — 7 coins (Unlimited)
+      - A bread — 14 coins (Unlimited)
+      - A waybread — 72 coins (Unlimited)
+
+   4. Updated State: Saved all the results into data/player.md and data/world.md as instructed.
+```
+
+### Technical Conclusion
+
+- We could have created a login script which gives enough context so that the agent did not waste tokens trying to figure out the text user interface. The login flows are deterministic so agent trying to develop a login method consumes tokens unnecessarily
+
+- The agent read the game infrastructure files and then gave me the answer. It did not actually play the game. It was unable to understand instructions properly at medium thinking level
+
+- The agent needed actual commands and instructions in the gemini cli session to properly telnet to the tbaMUD server and play the game. A MUD Manager would help small models to login to the game server. It had no idea about the text user interface to login and see its mistakes
+
+- The agent went off task when it failed to login and instead looked at infrastructure files to create a shortest path algorithm to complete the goal. At this architecture, coding harnesses are not a good fit
+
+- Having an MCP server to the MUD SDK would be much better for this architecture as then the agent can be steered with better context
+
+- Due to complexity of the state data, just updating markdowns is not sufficient
+
+> Use coding harness for coding/specialized task and for special purposes, use own agentic loop
