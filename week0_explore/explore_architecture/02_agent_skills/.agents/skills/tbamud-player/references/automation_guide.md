@@ -39,3 +39,15 @@ CircleMUD prompts typically display vital stats in angle brackets at the bottom 
 3. **Recovery**:
    - Sit/rest (`rest` or `sleep`) in a safe room to recover HP/Mana.
    - Execute `stand` when fully rested.
+
+---
+
+## 4. State Persistence & Long-Term Campaign Goals
+
+1. **State Tracking**:
+   - Check `data/player.md` to review character level, stats, active goals, and skill proficiencies.
+   - Check `data/world.md` to plan routes to shops, guilds, safe resting spots, and mob spawns.
+2. **Campaign Goal Loop (e.g., Reach Level 7 & Defeat Target Boss)**:
+   - **Phase 1 (Levels 1-3)**: Fight low-risk mobs (e.g., Fidos, stray dogs), gain EXP, loot gold. Return to shops for weapons/armor and practice skills at the guildmaster.
+   - **Phase 2 (Levels 4-6)**: Explore mid-tier zones, practice advanced combat skills/spells, and acquire superior equipment.
+   - **Phase 3 (Level 7 & Boss Fight)**: Execute `consider <boss_mob>`, prep healing/buff items, and execute combat loops with strict flee thresholds.

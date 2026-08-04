@@ -14,6 +14,14 @@ import json
 import argparse
 from typing import Tuple, List, Optional, Dict, Any
 
+try:
+    from state_manager import parse_and_update_state
+except ImportError:
+    try:
+        from scripts.state_manager import parse_and_update_state
+    except ImportError:
+        parse_and_update_state = None
+
 # Telnet Commands & Options (RFC 854)
 IAC  = bytes([255])  # Interpret As Command
 DONT = bytes([254])  # Don't perform option
@@ -330,6 +338,12 @@ def main():
 
     res = client.execute_commands(commands, strip_ansi=strip_ansi)
     client.close()
+
+    if parse_and_update_state and res.get("success"):
+        try:
+            parse_and_update_state(res["results"])
+        except Exception as e:
+            print(f"[WARN] Failed to update state memory: {e}", file=sys.stderr)
 
     if args.json:
         print(json.dumps(res, indent=2))

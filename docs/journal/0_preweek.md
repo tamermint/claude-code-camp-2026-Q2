@@ -58,14 +58,53 @@ Using Gemini Flash 3.5 thinking effort medium, we created a GEMINI.md with a sim
 
 A common way to drive agent functionality is by using Agent Skills - an open format adopted by coding harnesses and agent SDKs.
 
-We used the Anti Gravity CLI skill creator skill to create a skill to play the MUD game
-
-We should attempt to give a simple goal that utilises the skill to play the game. We gave a simple goal - 'find the bakery and list the menu'
+We should create a skill that has its own script that can connect to the MUD and we should attempt to have it play its own game
 
 ### Technical Observations
+
+- We used the Anti Gravity CLI with model Gemini 3.5-Flash and skill-creator skill to create a skill to play the MUD game
 
 - The agent attempted to read outside the workspace and I denied the tool call. I had to reprompt the creation of the skill and it created it.
 
 - The agent created a skill `tbamud-player` and created a `mud_client.py` script It changed its code for handling welcome screen message and re-launched commands for exits and evaluating surroundings from the mud client script.
 
-- The agent took significantly less time to acheive the objective compared to the plain agent architecture.
+- The agent took significantly less time to acheive the objective compared to the plain agent architecture for simple goals. It was able to acheive the goal and it did stop when a task was not possible e.g. when we asked it to practice kick at the swordsmen guild, it was able to find the guild but could not practice as there were no sessions and it reported back. But it never considered if it should attempt to level up or how hard the would it be to level up the kick
+
+- When giving it a harder goal like defeating the minotaur in the newbie zone, it did find the minotaur's location but engaged in combat early without leveling up. Also, it kept brute forcing around the location to maybe avoid the minotaur but at times, it kept attacking the minotaur at every other iteration. It used python scripts to use the MUD client to play the game
+
+- It did update the player and world md files with the player and world state but not in real time. I had to prompt it to add the findings in the right .md files
+
+- A real player would have held the goal and progressed more deliberately, exploring locations and levelling up rather than ending up facing the minotaur prematurely. There is no real time reasoning before it acts in the game.
+
+- If Anti-Gravity's agentic loops change, then the reasoning might break in unexpected ways
+
+- We may need adaptive task management i.e. a way for the agent to update its task as and when it completes. Interestingly, the agent did output a phased campaign plan but there were no tasks and it didn't follow that plan through
+  E.g. Goal : Defeat the Massive Minotaur in the Newbie Zone north of town
+
+Before I find the newbie zone, do I need to prepare?
+
+- collect info from NPCs for my goal?
+- obtain equipment / inventory ?
+- practice / level up?
+
+I head to Newbie zone.
+
+- While on path do I find something that needs a detour? Will this start a sidequest?
+- Explorer mode:
+  - Focused: Only campaign goals
+  - Curios: Consider side quests while on main quest to get additional XP
+  - Aloof: Do all sidequests and don't bother about the main quest
+
+I found the Newbie zone.
+
+- Risk mode:
+  - Bold: Try and push exploration to end goal and try to engage high level mobs or try and fight stronger opponents
+  - Scared: Don't progress exploration unless I am completely healed. Always have plenty of resources if you lose money or if you are hungry/thirsty
+
+### Technical Conclusions
+
+Agent skills definitely work for smaller goals. Though it's a marginal improvement over the referenced file approach, it gives the agent tools to acheive a goal rather than a blank slate approach of goal definition --> outcome. This approach has a better agent steering capability than the referenced agent appproach. Also, it did not keep creating blanket python files at every single iteration. It created scripts when the skill was created and it updated the script when it was necessary
+
+We should define a player persona which describes how the player likes to play based on risk mode, exploration mode.
+
+When we enter a goal, we should see a concrete goal decomposition plan that outlines steps the agent must take to level up accoding to the goal.
