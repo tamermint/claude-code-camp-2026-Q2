@@ -53,3 +53,19 @@ Using Gemini Flash 3.5 thinking effort medium, we created a GEMINI.md with a sim
 - Due to complexity of the state data, just updating markdowns is not sufficient
 
 > Use coding harness for coding/specialized task and for special purposes, use own agentic loop
+
+## 2. Agent skills driven by main agent e.g. ~/.skills
+
+A common way to drive agent functionality is by using Agent Skills - an open format adopted by coding harnesses and agent SDKs.
+
+We used the Anti Gravity CLI skill creator skill to create a skill to play the MUD game
+
+We should attempt to give a simple goal that utilises the skill to play the game. We gave a simple goal - 'find the bakery and list the menu'
+
+### Technical Observations
+
+- The agent attempted to read outside the workspace and I denied the tool call. I had to reprompt the creation of the skill and it created it.
+
+- The agent created a skill `tbamud-player` and created a `mud_client.py` script It changed its code for handling welcome screen message and re-launched commands for exits and evaluating surroundings from the mud client script.
+
+- The agent took significantly less time to acheive the objective compared to the plain agent architecture.
