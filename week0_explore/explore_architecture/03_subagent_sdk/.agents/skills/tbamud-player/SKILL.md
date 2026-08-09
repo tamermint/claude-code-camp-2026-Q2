@@ -1,5 +1,5 @@
 ---
-name: play-mud
+name: tbamud-player
 description: >-
   Play, interact with, and automate gameplay in tbaMUD / CircleMUD games running on telnet (e.g., localhost:4000).
   Use this skill when asked to connect to a MUD, issue MUD commands, explore rooms, check player status, or run MUD automation scripts.
