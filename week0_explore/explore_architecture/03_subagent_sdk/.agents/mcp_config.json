@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "example-server": {
+      "command": "node",
+      "args": ["/absolute/path/to/server.js"],
+      "env": {
+        "DEBUG": "true"
+      }
+    }
+  }
+}

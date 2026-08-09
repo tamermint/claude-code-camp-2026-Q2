@@ -1,0 +1,231 @@
+#!/usr/bin/env python3
+"""
+State Manager for tbaMUD / CircleMUD Player Skill.
+Parses MUD command outputs (score, look, exits, list, prac, inventory, equipment)
+and updates data/player.md and data/world.md.
+"""
+
+import os
+import re
+import json
+from typing import Dict, Any, List
+
+DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
+PLAYER_FILE = os.path.join(DATA_DIR, "player.md")
+WORLD_FILE = os.path.join(DATA_DIR, "world.md")
+
+
+def ensure_data_files():
+    """Ensure data directory and state markdown files exist."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    if not os.path.exists(PLAYER_FILE):
+        with open(PLAYER_FILE, "w", encoding="utf-8") as f:
+            f.write(DEFAULT_PLAYER_MD)
+    if not os.path.exists(WORLD_FILE):
+        with open(WORLD_FILE, "w", encoding="utf-8") as f:
+            f.write(DEFAULT_WORLD_MD)
+
+
+DEFAULT_PLAYER_MD = """# Player State Memory
+
+## Character Info
+- **Name**: Dummy
+- **Class**: Warrior
+- **Title**: Dummy the Swordpupil
+- **Level**: 1
+- **Age**: 17
+- **Target Goal**: Reach Level 7 & Defeat Target Boss Monster
+
+## Stats & Vitals
+- **HP**: 22 / 22
+- **Mana**: 100 / 100
+- **Move**: 71 / 85
+- **Armor Class**: 100/10
+- **Alignment**: 0
+
+## Progression
+- **Current EXP**: 1
+- **EXP Needed for Next Level**: 1999
+- **Gold**: 0 coins
+- **Quest Points**: 0
+
+## Skills & Spells
+- `kick`: bad (0 sessions remaining)
+
+## Equipment & Inventory
+- **Equipment**: None equipped
+- **Inventory**: Empty
+
+## Active Goals
+- [ ] Explore Midgaard and train basic skills
+- [ ] Acquire weapons and armor
+- [ ] Level up to Level 7
+- [ ] Locate and defeat target boss monster
+"""
+
+DEFAULT_WORLD_MD = """# World State Memory (Midgaard & Surrounding Realms)
+
+## Key Locations & Discovered Rooms
+
+| Room Name | Exits | Notable Mobs / Features |
+|---|---|---|
+| The Temple Of Midgaard | N, E, S, W, D | ATM, Temple Gate |
+| The Temple Square | N, E, S, W | Marble Fountain |
+| Market Square | N, E, S, W | Peacekeeper, Statue, Cityguard |
+| Main Street (West) | N, E, S, W | Bakery (N), Armory (S) |
+| The Bakery | S | Baker (Danish 7c, Bread 14c, Waybread 72c) |
+| Main Street (Far West) | N, E, S, W | Magic Shop (N), Mages' Guild (S), West Gate (W), Fido |
+| Main Street (East) | N, E, S, W | General Store (N), Pet Shop (S) |
+| Main Street (Far East) | N, E, S, W | Weapon Shop (N), Guild of Swordsmen (S), East Gate (E), Fido |
+| Entrance to Guild of Swordsmen | N, E | Knight Guard, Peacekeeper, ATM |
+| Bar of Swordsmen | S, W | Waiter, Bulletin Board |
+| Tournament and Practice Yard | N, D | **Guildmaster**, Well leading down |
+
+## Shops & Vendors
+- **Bakery**: Danish Pastry (7c), Bread (14c), Waybread (72c)
+- **Armory**: Main Street West -> South
+- **Weapon Shop**: Main Street Far East -> North
+- **General Store**: Main Street East -> North
+- **Magic Shop**: Main Street Far West -> North
+
+## Guilds
+- **Warrior (Swordsmen)**: Main Street Far East -> South -> East -> South (Guildmaster in Practice Yard)
+- **Mage**: Main Street Far West -> South
+- **Cleric**: Temple Square -> West
+
+## Danger Zones & Monsters
+- **Fidos / Scavengers**: Main Street (Low level / Neutral)
+- **Dark Well**: Down from Warrior Practice Yard (Unexplored)
+"""
+
+
+def parse_and_update_state(command_results: List[Dict[str, str]]):
+    """Parse outputs from MUD command results and update player.md & world.md."""
+    ensure_data_files()
+    
+    score_data = {}
+    room_data = {}
+
+    for res in command_results:
+        cmd = res.get("command", "").strip().lower()
+        out = res.get("output", "")
+
+        # Parse score
+        if cmd == "score" or "ranks you as" in out.lower():
+            m_age = re.search(r"You are (\d+) years old", out)
+            m_stats = re.search(r"(\d+)\((\d+)\)\s+hit,\s+(\d+)\((\d+)\)\s+mana\s+and\s+(\d+)\((\d+)\)\s+movement", out)
+            m_ac = re.search(r"armor class is ([^,]+)", out)
+            m_align = re.search(r"alignment is ([-\d]+)", out)
+            m_exp = re.search(r"have (\d+) exp,\s+(\d+) gold coins", out)
+            m_need = re.search(r"need (\d+) exp to reach your next level", out)
+            m_rank = re.search(r"ranks you as (.*?)\s+\(level (\d+)\)", out)
+
+            if m_rank:
+                score_data["title"] = m_rank.group(1)
+                score_data["level"] = m_rank.group(2)
+            if m_stats:
+                score_data["hp"] = f"{m_stats.group(1)} / {m_stats.group(2)}"
+                score_data["mana"] = f"{m_stats.group(3)} / {m_stats.group(4)}"
+                score_data["move"] = f"{m_stats.group(5)} / {m_stats.group(6)}"
+            if m_ac:
+                score_data["ac"] = m_ac.group(1)
+            if m_align:
+                score_data["alignment"] = m_align.group(1)
+            if m_exp:
+                score_data["exp"] = m_exp.group(1)
+                score_data["gold"] = m_exp.group(2)
+            if m_need:
+                score_data["exp_needed"] = m_need.group(1)
+            if m_age:
+                score_data["age"] = m_age.group(1)
+
+        # Parse look / room
+        if cmd in ("look", "l") or "[ Exits:" in out:
+            lines = [l.strip() for l in out.splitlines() if l.strip()]
+            if lines and "[ Exits:" in out:
+                room_title = lines[0]
+                exits_match = re.search(r"\[ Exits:\s*([^\]]+)\s*\]", out)
+                exits_str = exits_match.group(1).upper() if exits_match else "None"
+                mobs_and_objs = []
+                for line in lines[1:]:
+                    if line.startswith("[ Exits:") or "H " in line and "V " in line:
+                        continue
+                    if any(kw in line.lower() for kw in ["is here", "standing here", "guarding", "wiping flour", "mucking"]):
+                        mobs_and_objs.append(line)
+                room_data[room_title] = {
+                    "exits": exits_str,
+                    "features": "; ".join(mobs_and_objs) if mobs_and_objs else "Clear"
+                }
+
+    if score_data:
+        update_player_md(score_data)
+    if room_data:
+        update_world_md(room_data)
+
+
+def update_player_md(data: Dict[str, str]):
+    """Update stats in data/player.md."""
+    if not os.path.exists(PLAYER_FILE):
+        return
+
+    with open(PLAYER_FILE, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    if "title" in data:
+        content = re.sub(r"- \*\*Title\*\*: .*", f"- **Title**: {data['title']}", content)
+    if "level" in data:
+        content = re.sub(r"- \*\*Level\*\*: .*", f"- **Level**: {data['level']}", content)
+    if "age" in data:
+        content = re.sub(r"- \*\*Age\*\*: .*", f"- **Age**: {data['age']}", content)
+    if "hp" in data:
+        content = re.sub(r"- \*\*HP\*\*: .*", f"- **HP**: {data['hp']}", content)
+    if "mana" in data:
+        content = re.sub(r"- \*\*Mana\*\*: .*", f"- **Mana**: {data['mana']}", content)
+    if "move" in data:
+        content = re.sub(r"- \*\*Move\*\*: .*", f"- **Move**: {data['move']}", content)
+    if "ac" in data:
+        content = re.sub(r"- \*\*Armor Class\*\*: .*", f"- **Armor Class**: {data['ac']}", content)
+    if "alignment" in data:
+        content = re.sub(r"- \*\*Alignment\*\*: .*", f"- **Alignment**: {data['alignment']}", content)
+    if "exp" in data:
+        content = re.sub(r"- \*\*Current EXP\*\*: .*", f"- **Current EXP**: {data['exp']}", content)
+    if "gold" in data:
+        content = re.sub(r"- \*\*Gold\*\*: .*", f"- **Gold**: {data['gold']} coins", content)
+    if "exp_needed" in data:
+        content = re.sub(r"- \*\*EXP Needed for Next Level\*\*: .*", f"- **EXP Needed for Next Level**: {data['exp_needed']}", content)
+
+    with open(PLAYER_FILE, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def update_world_md(room_data: Dict[str, Dict[str, str]]):
+    """Add or update rooms in data/world.md key locations table."""
+    if not os.path.exists(WORLD_FILE):
+        return
+
+    with open(WORLD_FILE, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    for room_name, info in room_data.items():
+        # Escape pipe characters in room_name or features
+        clean_name = room_name.replace("|", "-")
+        clean_exits = info["exits"].replace("|", "-")
+        clean_feat = info["features"].replace("|", "-")
+
+        if clean_name in content:
+            continue  # Already in world.md table
+        
+        # Append new row before ## Shops & Vendors or at end of table
+        new_row = f"| {clean_name} | {clean_exits} | {clean_feat} |\n"
+        if "## Shops & Vendors" in content:
+            content = content.replace("## Shops & Vendors", f"{new_row}\n## Shops & Vendors")
+        else:
+            content += f"\n{new_row}"
+
+    with open(WORLD_FILE, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+if __name__ == "__main__":
+    ensure_data_files()
+    print(f"[INFO] State files verified at {DATA_DIR}")

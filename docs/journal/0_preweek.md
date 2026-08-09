@@ -68,6 +68,8 @@ We should create a skill that has its own script that can connect to the MUD and
 
 - The agent created a skill `tbamud-player` and created a `mud_client.py` script It changed its code for handling welcome screen message and re-launched commands for exits and evaluating surroundings from the mud client script.
 
+- The agent created reference guides for gameplay and for commands.
+
 - The agent took significantly less time to acheive the objective compared to the plain agent architecture for simple goals. It was able to acheive the goal and it did stop when a task was not possible e.g. when we asked it to practice kick at the swordsmen guild, it was able to find the guild but could not practice as there were no sessions and it reported back. But it never considered if it should attempt to level up or how hard the would it be to level up the kick
 
 - When giving it a harder goal like defeating the minotaur in the newbie zone, it did find the minotaur's location but engaged in combat early without leveling up. Also, it kept brute forcing around the location to maybe avoid the minotaur but at times, it kept attacking the minotaur at every other iteration. It used python scripts to use the MUD client to play the game
