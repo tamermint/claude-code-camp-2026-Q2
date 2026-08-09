@@ -28,7 +28,8 @@ def ensure_data_files():
 
 DEFAULT_PLAYER_MD = """# Player State Memory
 
-## Character Info
+## Dummy (Warrior)
+### Character Info
 - **Name**: Dummy
 - **Class**: Warrior
 - **Title**: Dummy the Swordpupil
@@ -36,27 +37,62 @@ DEFAULT_PLAYER_MD = """# Player State Memory
 - **Age**: 17
 - **Target Goal**: Reach Level 7 & Defeat Target Boss Monster
 
-## Stats & Vitals
+### Stats & Vitals
 - **HP**: 22 / 22
 - **Mana**: 100 / 100
 - **Move**: 71 / 85
 - **Armor Class**: 100/10
 - **Alignment**: 0
 
-## Progression
+### Progression
 - **Current EXP**: 1
 - **EXP Needed for Next Level**: 1999
 - **Gold**: 0 coins
 - **Quest Points**: 0
 
-## Skills & Spells
+### Skills & Spells
 - `kick`: bad (0 sessions remaining)
 
-## Equipment & Inventory
+### Equipment & Inventory
 - **Equipment**: None equipped
 - **Inventory**: Empty
 
-## Active Goals
+### Active Goals
+- [ ] Explore Midgaard and train basic skills
+- [ ] Acquire weapons and armor
+- [ ] Level up to Level 7
+- [ ] Locate and defeat target boss monster
+
+## Smarty (Mage)
+### Character Info
+- **Name**: Smarty
+- **Class**: Mage
+- **Title**: Smarty the Apprentice of Magic
+- **Level**: 1
+- **Age**: 17
+- **Target Goal**: Reach Level 7 & Defeat Target Boss Monster
+
+### Stats & Vitals
+- **HP**: 14 / 14
+- **Mana**: 100 / 100
+- **Move**: 83 / 83
+- **Armor Class**: 90/10
+- **Alignment**: 0
+
+### Progression
+- **Current EXP**: 1
+- **EXP Needed for Next Level**: 2499
+- **Gold**: 0 coins
+- **Quest Points**: 0
+
+### Skills & Spells
+- `kick`: bad (0 sessions remaining)
+
+### Equipment & Inventory
+- **Equipment**: None equipped
+- **Inventory**: Empty
+
+### Active Goals
 - [ ] Explore Midgaard and train basic skills
 - [ ] Acquire weapons and armor
 - [ ] Level up to Level 7
@@ -121,8 +157,18 @@ def parse_and_update_state(command_results: List[Dict[str, str]]):
             m_rank = re.search(r"ranks you as (.*?)\s+\(level (\d+)\)", out)
 
             if m_rank:
-                score_data["title"] = m_rank.group(1)
+                title = m_rank.group(1)
+                score_data["title"] = title
                 score_data["level"] = m_rank.group(2)
+                name_match = re.match(r"^(\w+)", title)
+                if name_match:
+                    score_data["name"] = name_match.group(1)
+                if "Apprentice of Magic" in title:
+                    score_data["class"] = "Mage"
+                elif "Swordpupil" in title:
+                    score_data["class"] = "Warrior"
+                else:
+                    score_data["class"] = "Unknown"
             if m_stats:
                 score_data["hp"] = f"{m_stats.group(1)} / {m_stats.group(2)}"
                 score_data["mana"] = f"{m_stats.group(3)} / {m_stats.group(4)}"
@@ -139,8 +185,56 @@ def parse_and_update_state(command_results: List[Dict[str, str]]):
             if m_age:
                 score_data["age"] = m_age.group(1)
 
+        elif cmd == "equipment" or "you are using:" in out.lower():
+            lines = [l.strip() for l in out.splitlines() if l.strip()]
+            eq_items = []
+            for line in lines:
+                if line.lower().startswith("you are using:") or "H " in line and "V " in line:
+                    continue
+                if line.strip().lower() == "nothing.":
+                    continue
+                m_eq = re.match(r"<[^>]+>\s+(.*)", line)
+                if m_eq:
+                    eq_items.append(m_eq.group(1).strip())
+            
+            if eq_items:
+                from collections import Counter
+                counts = Counter(eq_items)
+                eq_strs = []
+                for item, count in counts.items():
+                    if count > 1:
+                        eq_strs.append(f"{count}x {item}")
+                    else:
+                        eq_strs.append(item)
+                score_data["equipment"] = ", ".join(eq_strs)
+            else:
+                score_data["equipment"] = "None equipped"
+
+        elif cmd == "inventory" or "you are carrying:" in out.lower():
+            lines = [l.strip() for l in out.splitlines() if l.strip()]
+            inv_items = []
+            for line in lines:
+                if line.lower().startswith("you are carrying:") or "H " in line and "V " in line:
+                    continue
+                if line.strip().lower() == "nothing.":
+                    continue
+                inv_items.append(line.strip())
+            
+            if inv_items:
+                from collections import Counter
+                counts = Counter(inv_items)
+                inv_strs = []
+                for item, count in counts.items():
+                    if count > 1:
+                        inv_strs.append(f"{count}x {item}")
+                    else:
+                        inv_strs.append(item)
+                score_data["inventory"] = ", ".join(inv_strs)
+            else:
+                score_data["inventory"] = "Empty"
+
         # Parse look / room
-        if cmd in ("look", "l") or "[ Exits:" in out:
+        elif cmd in ("look", "l") or "[ Exits:" in out:
             lines = [l.strip() for l in out.splitlines() if l.strip()]
             if lines and "[ Exits:" in out:
                 room_title = lines[0]
@@ -164,38 +258,152 @@ def parse_and_update_state(command_results: List[Dict[str, str]]):
 
 
 def update_player_md(data: Dict[str, str]):
-    """Update stats in data/player.md."""
-    if not os.path.exists(PLAYER_FILE):
-        return
+    """Update stats for a specific player section inside data/player.md."""
+    player_name = data.get("name", "Dummy").capitalize()
+    
+    # Read current content or start with default
+    content = ""
+    if os.path.exists(PLAYER_FILE):
+        with open(PLAYER_FILE, "r", encoding="utf-8") as f:
+            content = f.read()
+            
+    if not content.strip():
+        content = DEFAULT_PLAYER_MD
 
-    with open(PLAYER_FILE, "r", encoding="utf-8") as f:
-        content = f.read()
+    # Split content into sections by '## '
+    sections = content.split("\n## ")
+    header = sections[0]
+    player_sections = {}
+    
+    for sec in sections[1:]:
+        lines = sec.splitlines()
+        if not lines:
+            continue
+        first_line = lines[0].strip()
+        name_match = re.match(r"^(\w+)", first_line)
+        if name_match:
+            sec_name = name_match.group(1).capitalize()
+            player_sections[sec_name] = "\n".join(lines[1:])
+            
+    # Default template for a new player section
+    default_section_template = """### Character Info
+- **Name**: {name}
+- **Class**: {class_name}
+- **Title**: {title}
+- **Level**: {level}
+- **Age**: {age}
+- **Target Goal**: Reach Level 7 & Defeat Massive Minotaur (Newbie Zone North of Midgaard)
 
-    if "title" in data:
-        content = re.sub(r"- \*\*Title\*\*: .*", f"- **Title**: {data['title']}", content)
-    if "level" in data:
-        content = re.sub(r"- \*\*Level\*\*: .*", f"- **Level**: {data['level']}", content)
-    if "age" in data:
-        content = re.sub(r"- \*\*Age\*\*: .*", f"- **Age**: {data['age']}", content)
-    if "hp" in data:
-        content = re.sub(r"- \*\*HP\*\*: .*", f"- **HP**: {data['hp']}", content)
-    if "mana" in data:
-        content = re.sub(r"- \*\*Mana\*\*: .*", f"- **Mana**: {data['mana']}", content)
-    if "move" in data:
-        content = re.sub(r"- \*\*Move\*\*: .*", f"- **Move**: {data['move']}", content)
-    if "ac" in data:
-        content = re.sub(r"- \*\*Armor Class\*\*: .*", f"- **Armor Class**: {data['ac']}", content)
-    if "alignment" in data:
-        content = re.sub(r"- \*\*Alignment\*\*: .*", f"- **Alignment**: {data['alignment']}", content)
-    if "exp" in data:
-        content = re.sub(r"- \*\*Current EXP\*\*: .*", f"- **Current EXP**: {data['exp']}", content)
-    if "gold" in data:
-        content = re.sub(r"- \*\*Gold\*\*: .*", f"- **Gold**: {data['gold']} coins", content)
-    if "exp_needed" in data:
-        content = re.sub(r"- \*\*EXP Needed for Next Level\*\*: .*", f"- **EXP Needed for Next Level**: {data['exp_needed']}", content)
+### Stats & Vitals
+- **HP**: {hp}
+- **Mana**: {mana}
+- **Move**: {move}
+- **Armor Class**: {ac}
+- **Alignment**: {alignment}
+
+### Progression
+- **Current EXP**: {exp}
+- **EXP Needed for Next Level**: {exp_needed}
+- **Gold**: {gold} coins
+- **Quest Points**: {quest_points}
+
+### Skills & Spells
+- `kick`: bad (0 sessions remaining)
+
+### Equipment & Inventory
+- **Equipment**: {equipment}
+- **Inventory**: {inventory}
+
+### Active Goals
+- [x] Explore Newbie Zone north of Midgaard and locate Minotaur Lair
+- [ ] Grinding Phase (Levels 1-3): Slay Creepy Crawlers to earn EXP and Gold
+- [ ] Gear Up Phase: Buy armor from Armory & weapon from Weapon Shop
+- [ ] Training Phase: Train kick and physical skills at Warrior Guildmaster
+- [ ] Reaching Level 7: Level up character to level 7
+- [ ] Boss Raid: Enter Alchemist's Room stairs down (`d`), `consider minotaur`, and defeat the Massive Minotaur!
+"""
+
+    player_class = data.get("class", "Warrior" if player_name == "Dummy" else "Mage")
+    title = data.get("title", f"{player_name} the Apprentice")
+    level = data.get("level", "1")
+    age = data.get("age", "17")
+    hp = data.get("hp", "10 / 10")
+    mana = data.get("mana", "100 / 100")
+    move = data.get("move", "80 / 80")
+    ac = data.get("ac", "100/10")
+    alignment = data.get("alignment", "0")
+    exp = data.get("exp", "0")
+    exp_needed = data.get("exp_needed", "2000")
+    gold = data.get("gold", "0")
+    quest_points = data.get("quest_points", "0")
+    equipment = data.get("equipment", "None equipped")
+    inventory = data.get("inventory", "Empty")
+
+    sec_content = player_sections.get(player_name)
+    if not sec_content:
+        sec_content = default_section_template.format(
+            name=player_name,
+            class_name=player_class,
+            title=title,
+            level=level,
+            age=age,
+            hp=hp,
+            mana=mana,
+            move=move,
+            ac=ac,
+            alignment=alignment,
+            exp=exp,
+            exp_needed=exp_needed,
+            gold=gold,
+            quest_points=quest_points,
+            equipment=equipment,
+            inventory=inventory
+        )
+    else:
+        # Update existing fields
+        if "name" in data:
+            sec_content = re.sub(r"- \*\*Name\*\*: .*", f"- **Name**: {data['name']}", sec_content)
+        if "class" in data:
+            sec_content = re.sub(r"- \*\*Class\*\*: .*", f"- **Class**: {data['class']}", sec_content)
+        if "title" in data:
+            sec_content = re.sub(r"- \*\*Title\*\*: .*", f"- **Title**: {data['title']}", sec_content)
+        if "level" in data:
+            sec_content = re.sub(r"- \*\*Level\*\*: .*", f"- **Level**: {data['level']}", sec_content)
+        if "age" in data:
+            sec_content = re.sub(r"- \*\*Age\*\*: .*", f"- **Age**: {data['age']}", sec_content)
+        if "hp" in data:
+            sec_content = re.sub(r"- \*\*HP\*\*: .*", f"- **HP**: {data['hp']}", sec_content)
+        if "mana" in data:
+            sec_content = re.sub(r"- \*\*Mana\*\*: .*", f"- **Mana**: {data['mana']}", sec_content)
+        if "move" in data:
+            sec_content = re.sub(r"- \*\*Move\*\*: .*", f"- **Move**: {data['move']}", sec_content)
+        if "ac" in data:
+            sec_content = re.sub(r"- \*\*Armor Class\*\*: .*", f"- **Armor Class**: {data['ac']}", sec_content)
+        if "alignment" in data:
+            sec_content = re.sub(r"- \*\*Alignment\*\*: .*", f"- **Alignment**: {data['alignment']}", sec_content)
+        if "exp" in data:
+            sec_content = re.sub(r"- \*\*Current EXP\*\*: .*", f"- **Current EXP**: {data['exp']}", sec_content)
+        if "gold" in data:
+            sec_content = re.sub(r"- \*\*Gold\*\*: .*", f"- **Gold**: {data['gold']} coins", sec_content)
+        if "exp_needed" in data:
+            sec_content = re.sub(r"- \*\*EXP Needed for Next Level\*\*: .*", f"- **EXP Needed for Next Level**: {data['exp_needed']}", sec_content)
+        if "equipment" in data:
+            sec_content = re.sub(r"- \*\*Equipment\*\*: .*", f"- **Equipment**: {data['equipment']}", sec_content)
+        if "inventory" in data:
+            sec_content = re.sub(r"- \*\*Inventory\*\*: .*", f"- **Inventory**: {data['inventory']}", sec_content)
+
+    player_sections[player_name] = sec_content
+
+    # Reconstruct player.md
+    new_content = header.rstrip() + "\n"
+    for name in sorted(player_sections.keys()):
+        p_class = data.get("class", "Warrior" if name == "Dummy" else "Mage")
+        m_class = re.search(r"- \*\*Class\*\*: (.*)", player_sections[name])
+        sec_class = m_class.group(1).strip() if m_class else p_class
+        new_content += f"\n## {name} ({sec_class})\n{player_sections[name].strip()}\n"
 
     with open(PLAYER_FILE, "w", encoding="utf-8") as f:
-        f.write(content)
+        f.write(new_content)
 
 
 def update_world_md(room_data: Dict[str, Dict[str, str]]):

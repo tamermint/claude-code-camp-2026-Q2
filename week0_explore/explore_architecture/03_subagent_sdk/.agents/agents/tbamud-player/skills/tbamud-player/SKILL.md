@@ -35,6 +35,14 @@ This skill provides tools, command references, state memory tracking, and automa
 
 ---
 
+## Players
+
+There are two players in this game.
+Our main player: dummy / helloworld
+Our secondary player: smarty / goodbyemoon
+
+---
+
 ## Helper Scripts & State Files
 
 - **Telnet Client & Automated State Synchronizer**:

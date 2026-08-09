@@ -18,6 +18,12 @@ def main():
                 "decision": "allow",
                 "reason": "Auto-allowed running python command in workspace"
             }
+            # Write to a log file to prove hook is executed
+            try:
+                with open('/Users/vivekmitra/.gemini/antigravity-cli/brain/3856ee49-635e-407b-b949-995c3be67f4e/scratch/hook_log.txt', 'a') as log_f:
+                    log_f.write(f"Hook auto-allowed: {args}\n")
+            except Exception:
+                pass
         else:
             result = {
                 "decision": "ask"
