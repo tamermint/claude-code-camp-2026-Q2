@@ -19,8 +19,8 @@ This skill provides tools, command references, state memory tracking, and automa
    - Strip ANSI control sequences for clean AI text processing or retain raw output for display.
 
 2. **Persistent State Memory & Long-Term Goals**:
-   - Maintains character progress in [player.md](../data/player.md) (Level, HP/Mana/Move, EXP, Gold, Skills, Goals).
-   - Maintains discovered map and vendor data in [world.md](../data/world.md) (Rooms, Exits, Mobs, Guilds, Shops, Danger Zones).
+   - Maintains character progress in [player.md](./data/player.md) (Level, HP/Mana/Move, EXP, Gold, Skills, Goals).
+   - Maintains discovered map and vendor data in [world.md](./data/world.md) (Rooms, Exits, Mobs, Guilds, Shops, Danger Zones).
    - Agents MUST inspect and update these memory files when planning multi-step goals (e.g., reaching Level 7, acquiring equipment, defeating boss mobs).
 
 3. **Command Execution**:
@@ -38,13 +38,13 @@ This skill provides tools, command references, state memory tracking, and automa
 ## Helper Scripts & State Files
 
 - **Telnet Client & Automated State Synchronizer**:
-  [mud_client.py](../scripts/mud_client.py)
+  [mud_client.py](./scripts/mud_client.py)
 - **State Parsing & Memory Manager**:
-  [state_manager.py](../scripts/state_manager.py)
+  [state_manager.py](./scripts/state_manager.py)
 - **Player State Memory**:
-  [player.md](../data/player.md)
+  [player.md](./data/player.md)
 - **World State Memory**:
-  [world.md](../data/world.md)
+  [world.md](./data/world.md)
 
 ### Common Usage Examples
 
@@ -69,6 +69,6 @@ This skill provides tools, command references, state memory tracking, and automa
 
 ## Documentation & References
 
-- [tbaMUD / CircleMUD Command Reference](../references/tbamud_commands.md): Complete list of player and movement commands.
-- [AI Automation Guide](../references/automation_guide.md): Strategies for navigation, questing, and combat loops.
-- [Programmatic Session Example](../examples/session_example.py): Python example showing custom scripted automation.
+- [tbaMUD / CircleMUD Command Reference](./references/tbamud_commands.md): Complete list of player and movement commands.
+- [AI Automation Guide](./references/automation_guide.md): Strategies for navigation, questing, and combat loops.
+- [Programmatic Session Example](./examples/session_example.py): Python example showing custom scripted automation.
