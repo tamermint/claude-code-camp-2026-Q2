@@ -69,6 +69,14 @@
 
 | A Turn In The Passage | E S  | Clear |
 
+| The Dirt Path | E W  | Clear |
+
+| This zone is above your recommended level. | E W  | Clear |
+
+| The Great Chessboard Of Midgaard | E W  | Clear |
+
+| The Reading Room | E  | Clear |
+
 ## Shops & Vendors
 - **Bakery**: Danish Pastry (7c), Bread (14c), Waybread (72c)
 - **Armory**: Main Street West -> South

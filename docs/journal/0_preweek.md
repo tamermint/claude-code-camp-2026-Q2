@@ -110,3 +110,15 @@ Agent skills definitely work for smaller goals. Though it's a marginal improveme
 We should define a player persona which describes how the player likes to play based on risk mode, exploration mode.
 
 When we enter a goal, we should see a concrete goal decomposition plan that outlines steps the agent must take to level up accoding to the goal.
+
+## 3a. Agent skills driven by subagent sdk
+
+Subagent SDK is a way for the coding harness to utilize a sub-agent to perform tasks and gets the output as a result of tool calls
+
+We should reuse the skill used in type 2 architecture for the agent to drive the sub-agent to accomplish user goals
+
+### Technical observations
+
+- The agent kept asking for permissions for every python script it tried to run in the local directory. After asking the agent to update permissions, it started updating the global settings
+
+- The agent ended up creating a allow_python script which did not run smoothly on every iteration. Partially because agy cli has an explicit permissions module which overrides any scripting
