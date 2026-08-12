@@ -126,3 +126,19 @@ We should reuse the skill used in type 2 architecture for the agent to drive the
 - The agent spawned the subagent that we created and was able to give it context. The subagent overwrote information from state memory but the orchestrator was able to steer the sub agent and reverted unwanted changes
 
 - The agent spawned two subagents and played the MUD game as two different players. We prompted it to maintain a shared world state memory and individual player state memory. It correctly identified race conditions for the single player state
+
+## 3b. Agent skills driven by subagent sdk - via agent definition
+
+Subagent SDK is a way for the coding harness to utilize a sub-agent to perform tasks and gets the output as a result of tool calls
+
+We should reuse the skill used in type 2 architecture for the agent to drive the sub-agent to accomplish user goals
+
+### Technical observations
+
+- The agent initially did not utilize adk. It just used gemini agents naming convention so that the agy cli can pick up the agent. After prompting examples from the official Google ADK page, it was able to install the adk
+
+- It did not ask me for API keys and I had to manually intervene looking at its chain-of-thought.
+
+- One core advantage I noticed is that the directory structure gets simpler when implementing the ADK. Rather than the nest .agents/agents/... structure we can keep all the necessary scripts in the root and call the adk runner to play the game
+
+- The agent spawned two subagents upon prompting and was able to handle concurrent sessions
