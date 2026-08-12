@@ -1,36 +1,33 @@
 # Project Rules & Guidelines
 
-Welcome to the `03_subagent_sdk` workspace. This project contains experiments and implementations for the Subagent SDK within the Claude Code Camp repository.
+Welcome to the `03b_subagent_sdk` workspace. This project contains experiments and implementations for programmatically orchestrating AI agents using the Google Gemini ADK.
 
 ## 1. Directory Structure Standards
 
-This workspace is configured to follow Gemini's **Antigravity Customization System** standards. Local configuration files are located under the `.agents/` folder:
+This workspace is configured as a simplified, code-first Python environment for agent orchestration:
 
-*   `.agents/rules/` - Directory for contextual rules (applied dynamically based on folder).
-*   `.agents/skills/` - Custom skills (progressive disclosure runbooks).
-*   `.agents/mcp_config.json` - MCP Server integration config.
-*   `.agents/hooks.json` - Agent execution loop lifecycle hooks.
+*   `run_agent_adk.py` - Core driver script that uses Gemini ADK `LlmAgent` and `InMemoryRunner` to run the agent.
+*   `agent.md` - System instructions and YAML frontmatter metadata for the MUD player agent.
+*   `mud_client.py` - Programmatic telnet client to connect to tbaMUD and execute actions.
+*   `state_manager.py` - Parser to update character/world status in memory markdown files.
+*   `data/` - Local directory containing markdown state memory files:
+    *   `data/player_dummy.md` - Isolated state data for dummy.
+    *   `data/player_smarty.md` - Isolated state data for smarty.
+    *   `data/world.md` - Shared world status map.
+*   `.venv/` - Local Python virtual environment containing the `google-adk` package.
+*   `.env` - Environment file storing API key credentials.
 
 ---
 
-## 2. Coding Guidelines for Subagents
+## 2. Coding Guidelines for Agents
 
-When developing subagent logic or scripts in this workspace:
+When developing or modifying agent logic in this workspace:
+
+### Code-First Design
+*   Define agent prompts in `agent.md` and parse them programmatically to construct `LlmAgent` instances.
+*   Expose gameplay and helper actions as python function tools to bind directly to the agent.
+*   Use `InMemoryRunner.run_async()` to drive the session step-by-step.
 
 ### Modularity
-*   Keep subagents focused on a single responsibility.
-*   Use standard input/output (stdin/stdout) streams or structured payloads for communication.
-
-### Error Handling & Reliability
-*   Implement clean error codes and descriptive message formats.
-*   Add validation/sanity checks before invoking subagent scripts.
-*   Ensure all long-running processes gracefully terminate under timeouts.
-
----
-
-## 3. Customization Framework Reference
-
-For details on extending agent behavior:
-*   **Rules**: Create markdown files in `.agents/rules/*.md`.
-*   **Skills**: Create a directory in `.agents/skills/<name>/` with a `SKILL.md` frontmatter file.
-*   **MCP Servers**: Define tool integrations in `.agents/mcp_config.json`.
+*   Keep the MUD connection client isolated from the state parsing logic.
+*   Use the state manager context locks to guarantee concurrent safety during execution.

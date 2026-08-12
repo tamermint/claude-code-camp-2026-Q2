@@ -10,7 +10,7 @@ import re
 import json
 from typing import Dict, Any, List
 
-DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
+DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "data"))
 WORLD_FILE = os.path.join(DATA_DIR, "world.md")
 
 
