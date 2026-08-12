@@ -8,32 +8,33 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from mud_client import MUDClient
-
 from google.adk.agents import LlmAgent
 
-# Define a tool for the ADK LlmAgent to interact with the MUD
-def execute_mud_commands(commands: str) -> str:
-    """
-    Executes a MUD command or a comma-separated list of commands in the MUD server.
-    Args:
-        commands: A string of MUD commands (e.g. "look" or "south, west, north")
-    Returns:
-        The command output from the MUD server.
-    """
-    print(f"\n[ADK Tool] Executing MUD command(s): {commands}")
-    client = MUDClient()
-    success, login_log = client.login(username="dummy", password="helloworld")
-    if not success:
-        return f"Failed to log in: {login_log}"
-    
-    cmd_list = [c.strip() for c in commands.split(",") if c.strip()]
-    res = client.execute_commands(cmd_list)
-    client.close()
-    
-    output = ""
-    for r in res.get("results", []):
-        output += f"=== {r['command']} ===\n{r['output']}\n\n"
-    return output
+# Factory to bind user-specific credentials to the tool
+def make_execute_mud_commands(user: str, password: str):
+    def execute_mud_commands(commands: str) -> str:
+        """
+        Executes a MUD command or a comma-separated list of commands in the MUD server.
+        Args:
+            commands: A string of MUD commands (e.g. "look" or "score")
+        Returns:
+            The command output from the MUD server.
+        """
+        print(f"\n[ADK Tool ({user})] Executing MUD command(s): {commands}")
+        client = MUDClient()
+        success, login_log = client.login(username=user, password=password)
+        if not success:
+            return f"Failed to log in: {login_log}"
+        
+        cmd_list = [c.strip() for c in commands.split(",") if c.strip()]
+        res = client.execute_commands(cmd_list)
+        client.close()
+        
+        output = ""
+        for r in res.get("results", []):
+            output += f"=== {r['command']} ===\n{r['output']}\n\n"
+        return output
+    return execute_mud_commands
 
 def parse_agent_md() -> dict:
     """Parses agent.md to extract the name, description, and instructions."""
@@ -41,7 +42,6 @@ def parse_agent_md() -> dict:
     with open(agent_md_path, "r", encoding="utf-8") as f:
         content = f.read()
     
-    # Parse YAML frontmatter
     frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n(.*)$", content, re.DOTALL)
     if not frontmatter_match:
         raise ValueError("Could not parse agent.md YAML frontmatter")
@@ -59,61 +59,68 @@ def parse_agent_md() -> dict:
         "instruction": instructions.strip()
     }
 
-async def main():
+async def run_single_agent(user: str, password: str, prompt: str):
     from google.adk.runners import InMemoryRunner
     from google.genai import types
 
     agent_info = parse_agent_md()
     
-    print(f"[+] Initializing Gemini ADK LlmAgent: {agent_info['name']}")
-    
-    # Instantiate the agent using LlmAgent
+    # Instantiate the LlmAgent with a user-specific tool
+    tool = make_execute_mud_commands(user, password)
     agent = LlmAgent(
         model="gemini-3.5-flash",
-        name=agent_info["name"].replace("-", "_"),
+        name=f"{agent_info['name']}_{user}".replace("-", "_"),
         instruction=agent_info["instruction"],
-        tools=[execute_mud_commands]
+        tools=[tool]
     )
     
     # Set up InMemoryRunner
-    runner = InMemoryRunner(agent=agent, app_name="tbamud_player_app")
+    runner = InMemoryRunner(agent=agent, app_name=f"tbamud_player_{user}")
     
     # Create the session (required by InMemoryRunner)
-    user_id = "dummy_user"
-    session_id = "tbamud_session"
+    session_id = f"tbamud_session_{user}"
     await runner.session_service.create_session(
-        app_name="tbamud_player_app",
-        user_id=user_id,
+        app_name=f"tbamud_player_{user}",
+        user_id=user,
         session_id=session_id
-    )
-    
-    # Prompt the agent to check the starting room and navigate to the Warrior Guild
-    prompt = (
-        "You are logged in as 'dummy'. Check your current room, list available exits, "
-        "and navigate step-by-step to the Warrior Guild. Based on your instructions, "
-        "the guild is located at: Main Street Far East -> South -> East -> South. "
-        "Execute the MUD commands necessary to reach the guild and verify arrival."
     )
     
     # Construct types.Content message
     msg = types.Content(role="user", parts=[types.Part.from_text(text=prompt)])
     
-    print(f"[+] Sending prompt to ADK Agent...")
-    print("\n--- ADK Agent Response ---")
-    
     # Run the agent and process output events
-    async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=msg):
+    async for event in runner.run_async(user_id=user, session_id=session_id, new_message=msg):
         if getattr(event, "error_message", None):
-            print(f"\n[Error] {event.error_message}", file=sys.stderr)
+            print(f"\n[Error - {user}] {event.error_message}", file=sys.stderr)
             break
             
         content = getattr(event, "content", None) or getattr(event, "output", None)
         if content and hasattr(content, "parts"):
             for part in content.parts:
                 if hasattr(part, "text") and part.text:
-                    print(part.text, end="", flush=True)
-                    
-    print("\n--------------------------")
+                    # Prefix each output line to make concurrent stdout distinct
+                    lines = part.text.splitlines()
+                    for line in lines:
+                        print(f"[{user}] {line}")
+
+async def main():
+    prompt_dummy = (
+        "You are logged in as 'dummy'. Run the 'score' command in the MUD to check "
+        "your character's status (including hunger, thirst, or other vitals). "
+        "Report back whether you are hungry or thirsty."
+    )
+    prompt_smarty = (
+        "You are logged in as 'smarty'. Run the 'score' command in the MUD to check "
+        "your character's status (including hunger, thirst, or other vitals). "
+        "Report back whether you are hungry or thirsty."
+    )
+    
+    print("[+] Launching both agents concurrently...")
+    await asyncio.gather(
+        run_single_agent("dummy", "helloworld", prompt_dummy),
+        run_single_agent("smarty", "goodbyemoon", prompt_smarty)
+    )
+    print("[+] Concurrent execution completed.")
 
 if __name__ == "__main__":
     asyncio.run(main())
