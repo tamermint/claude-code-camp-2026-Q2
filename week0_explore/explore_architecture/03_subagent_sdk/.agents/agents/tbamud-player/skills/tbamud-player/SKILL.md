@@ -19,14 +19,14 @@ This skill provides tools, command references, state memory tracking, and automa
    - Strip ANSI control sequences for clean AI text processing or retain raw output for display.
 
 2. **Persistent State Memory & Long-Term Goals**:
-   - Maintains character progress in [player.md](./data/player.md) (Level, HP/Mana/Move, EXP, Gold, Skills, Goals).
+   - Maintains character progress in [player_<username>.md](./data/player_<username>.md) (Level, HP/Mana/Move, EXP, Gold, Skills, Goals).
    - Maintains discovered map and vendor data in [world.md](./data/world.md) (Rooms, Exits, Mobs, Guilds, Shops, Danger Zones).
    - Agents MUST inspect and update these memory files when planning multi-step goals (e.g., reaching Level 7, acquiring equipment, defeating boss mobs).
 
 3. **Command Execution**:
    - Issue single commands (e.g., `look`, `score`, `inventory`, `north`, `prac`).
    - Issue batch command sequences.
-   - Automatically updates `player.md` and `world.md` after command runs.
+   - Automatically updates `player_<username>.md` and `world.md` after command runs.
 
 4. **Autonomous Navigation & Exploration**:
    - Execute room movement (`n`, `s`, `e`, `w`, `u`, `d`).
@@ -50,7 +50,7 @@ Our secondary player: smarty / goodbyemoon
 - **State Parsing & Memory Manager**:
   [state_manager.py](./scripts/state_manager.py)
 - **Player State Memory**:
-  [player.md](./data/player.md)
+  [player_<username>.md](./data/player_<username>.md)
 - **World State Memory**:
   [world.md](./data/world.md)
 

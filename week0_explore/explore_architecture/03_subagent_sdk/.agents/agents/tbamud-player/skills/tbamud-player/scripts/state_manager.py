@@ -11,16 +11,68 @@ import json
 from typing import Dict, Any, List
 
 DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
-PLAYER_FILE = os.path.join(DATA_DIR, "player.md")
 WORLD_FILE = os.path.join(DATA_DIR, "world.md")
 
 
-def ensure_data_files():
+class StateLock:
+    def __init__(self, data_dir: str):
+        self.lock_path = os.path.join(data_dir, ".state.lock")
+        self.lock_file = None
+
+    def __enter__(self):
+        try:
+            import fcntl
+            self.lock_file = open(self.lock_path, "w")
+            fcntl.flock(self.lock_file, fcntl.LOCK_EX)
+        except (ImportError, OSError):
+            pass
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.lock_file:
+            try:
+                import fcntl
+                fcntl.flock(self.lock_file, fcntl.LOCK_UN)
+            except (ImportError, OSError):
+                pass
+            try:
+                self.lock_file.close()
+            except Exception:
+                pass
+
+
+def get_player_file(username: str = None) -> str:
+    """Get path to the player state markdown file."""
+    if not username:
+        username = "dummy"
+    return os.path.join(DATA_DIR, f"player_{username.lower()}.md")
+
+
+def get_default_player_section(username: str = None) -> str:
+    """Extract only the default section for the given username from DEFAULT_PLAYER_MD."""
+    if not username:
+        return DEFAULT_PLAYER_MD
+    
+    sections = DEFAULT_PLAYER_MD.split("\n## ")
+    header = sections[0]
+    for sec in sections[1:]:
+        lines = sec.splitlines()
+        if not lines:
+            continue
+        first_line = lines[0].strip()
+        name_match = re.match(r"^(\w+)", first_line)
+        if name_match and name_match.group(1).lower() == username.lower():
+            return header.rstrip() + "\n\n## " + sec.strip() + "\n"
+    return DEFAULT_PLAYER_MD
+
+
+def ensure_data_files(username: str = None):
     """Ensure data directory and state markdown files exist."""
     os.makedirs(DATA_DIR, exist_ok=True)
-    if not os.path.exists(PLAYER_FILE):
-        with open(PLAYER_FILE, "w", encoding="utf-8") as f:
-            f.write(DEFAULT_PLAYER_MD)
+    player_file = get_player_file(username)
+    if not os.path.exists(player_file):
+        with open(player_file, "w", encoding="utf-8") as f:
+            f.write(get_default_player_section(username))
     if not os.path.exists(WORLD_FILE):
         with open(WORLD_FILE, "w", encoding="utf-8") as f:
             f.write(DEFAULT_WORLD_MD)
@@ -135,140 +187,142 @@ DEFAULT_WORLD_MD = """# World State Memory (Midgaard & Surrounding Realms)
 """
 
 
-def parse_and_update_state(command_results: List[Dict[str, str]]):
+def parse_and_update_state(command_results: List[Dict[str, str]], username: str = None):
     """Parse outputs from MUD command results and update player.md & world.md."""
-    ensure_data_files()
-    
-    score_data = {}
-    room_data = {}
+    with StateLock(DATA_DIR):
+        ensure_data_files(username)
+        
+        score_data = {}
+        room_data = {}
 
-    for res in command_results:
-        cmd = res.get("command", "").strip().lower()
-        out = res.get("output", "")
+        for res in command_results:
+            cmd = res.get("command", "").strip().lower()
+            out = res.get("output", "")
 
-        # Parse score
-        if cmd == "score" or "ranks you as" in out.lower():
-            m_age = re.search(r"You are (\d+) years old", out)
-            m_stats = re.search(r"(\d+)\((\d+)\)\s+hit,\s+(\d+)\((\d+)\)\s+mana\s+and\s+(\d+)\((\d+)\)\s+movement", out)
-            m_ac = re.search(r"armor class is ([^,]+)", out)
-            m_align = re.search(r"alignment is ([-\d]+)", out)
-            m_exp = re.search(r"have (\d+) exp,\s+(\d+) gold coins", out)
-            m_need = re.search(r"need (\d+) exp to reach your next level", out)
-            m_rank = re.search(r"ranks you as (.*?)\s+\(level (\d+)\)", out)
+            # Parse score
+            if cmd == "score" or "ranks you as" in out.lower():
+                m_age = re.search(r"You are (\d+) years old", out)
+                m_stats = re.search(r"(\d+)\((\d+)\)\s+hit,\s+(\d+)\((\d+)\)\s+mana\s+and\s+(\d+)\((\d+)\)\s+movement", out)
+                m_ac = re.search(r"armor class is ([^,]+)", out)
+                m_align = re.search(r"alignment is ([-\d]+)", out)
+                m_exp = re.search(r"have (\d+) exp,\s+(\d+) gold coins", out)
+                m_need = re.search(r"need (\d+) exp to reach your next level", out)
+                m_rank = re.search(r"ranks you as (.*?)\s+\(level (\d+)\)", out)
 
-            if m_rank:
-                title = m_rank.group(1)
-                score_data["title"] = title
-                score_data["level"] = m_rank.group(2)
-                name_match = re.match(r"^(\w+)", title)
-                if name_match:
-                    score_data["name"] = name_match.group(1)
-                if "Apprentice of Magic" in title:
-                    score_data["class"] = "Mage"
-                elif "Swordpupil" in title:
-                    score_data["class"] = "Warrior"
-                else:
-                    score_data["class"] = "Unknown"
-            if m_stats:
-                score_data["hp"] = f"{m_stats.group(1)} / {m_stats.group(2)}"
-                score_data["mana"] = f"{m_stats.group(3)} / {m_stats.group(4)}"
-                score_data["move"] = f"{m_stats.group(5)} / {m_stats.group(6)}"
-            if m_ac:
-                score_data["ac"] = m_ac.group(1)
-            if m_align:
-                score_data["alignment"] = m_align.group(1)
-            if m_exp:
-                score_data["exp"] = m_exp.group(1)
-                score_data["gold"] = m_exp.group(2)
-            if m_need:
-                score_data["exp_needed"] = m_need.group(1)
-            if m_age:
-                score_data["age"] = m_age.group(1)
-
-        elif cmd == "equipment" or "you are using:" in out.lower():
-            lines = [l.strip() for l in out.splitlines() if l.strip()]
-            eq_items = []
-            for line in lines:
-                if line.lower().startswith("you are using:") or "H " in line and "V " in line:
-                    continue
-                if line.strip().lower() == "nothing.":
-                    continue
-                m_eq = re.match(r"<[^>]+>\s+(.*)", line)
-                if m_eq:
-                    eq_items.append(m_eq.group(1).strip())
-            
-            if eq_items:
-                from collections import Counter
-                counts = Counter(eq_items)
-                eq_strs = []
-                for item, count in counts.items():
-                    if count > 1:
-                        eq_strs.append(f"{count}x {item}")
+                if m_rank:
+                    title = m_rank.group(1)
+                    score_data["title"] = title
+                    score_data["level"] = m_rank.group(2)
+                    name_match = re.match(r"^(\w+)", title)
+                    if name_match:
+                        score_data["name"] = name_match.group(1)
+                    if "Apprentice of Magic" in title:
+                        score_data["class"] = "Mage"
+                    elif "Swordpupil" in title:
+                        score_data["class"] = "Warrior"
                     else:
-                        eq_strs.append(item)
-                score_data["equipment"] = ", ".join(eq_strs)
-            else:
-                score_data["equipment"] = "None equipped"
+                        score_data["class"] = "Unknown"
+                if m_stats:
+                    score_data["hp"] = f"{m_stats.group(1)} / {m_stats.group(2)}"
+                    score_data["mana"] = f"{m_stats.group(3)} / {m_stats.group(4)}"
+                    score_data["move"] = f"{m_stats.group(5)} / {m_stats.group(6)}"
+                if m_ac:
+                    score_data["ac"] = m_ac.group(1)
+                if m_align:
+                    score_data["alignment"] = m_align.group(1)
+                if m_exp:
+                    score_data["exp"] = m_exp.group(1)
+                    score_data["gold"] = m_exp.group(2)
+                if m_need:
+                    score_data["exp_needed"] = m_need.group(1)
+                if m_age:
+                    score_data["age"] = m_age.group(1)
 
-        elif cmd == "inventory" or "you are carrying:" in out.lower():
-            lines = [l.strip() for l in out.splitlines() if l.strip()]
-            inv_items = []
-            for line in lines:
-                if line.lower().startswith("you are carrying:") or "H " in line and "V " in line:
-                    continue
-                if line.strip().lower() == "nothing.":
-                    continue
-                inv_items.append(line.strip())
-            
-            if inv_items:
-                from collections import Counter
-                counts = Counter(inv_items)
-                inv_strs = []
-                for item, count in counts.items():
-                    if count > 1:
-                        inv_strs.append(f"{count}x {item}")
-                    else:
-                        inv_strs.append(item)
-                score_data["inventory"] = ", ".join(inv_strs)
-            else:
-                score_data["inventory"] = "Empty"
-
-        # Parse look / room
-        elif cmd in ("look", "l") or "[ Exits:" in out:
-            lines = [l.strip() for l in out.splitlines() if l.strip()]
-            if lines and "[ Exits:" in out:
-                room_title = lines[0]
-                exits_match = re.search(r"\[ Exits:\s*([^\]]+)\s*\]", out)
-                exits_str = exits_match.group(1).upper() if exits_match else "None"
-                mobs_and_objs = []
-                for line in lines[1:]:
-                    if line.startswith("[ Exits:") or "H " in line and "V " in line:
+            elif cmd == "equipment" or "you are using:" in out.lower():
+                lines = [l.strip() for l in out.splitlines() if l.strip()]
+                eq_items = []
+                for line in lines:
+                    if line.lower().startswith("you are using:") or "H " in line and "V " in line:
                         continue
-                    if any(kw in line.lower() for kw in ["is here", "standing here", "guarding", "wiping flour", "mucking"]):
-                        mobs_and_objs.append(line)
-                room_data[room_title] = {
-                    "exits": exits_str,
-                    "features": "; ".join(mobs_and_objs) if mobs_and_objs else "Clear"
-                }
+                    if line.strip().lower() == "nothing.":
+                        continue
+                    m_eq = re.match(r"<[^>]+>\s+(.*)", line)
+                    if m_eq:
+                        eq_items.append(m_eq.group(1).strip())
+                
+                if eq_items:
+                    from collections import Counter
+                    counts = Counter(eq_items)
+                    eq_strs = []
+                    for item, count in counts.items():
+                        if count > 1:
+                            eq_strs.append(f"{count}x {item}")
+                        else:
+                            eq_strs.append(item)
+                    score_data["equipment"] = ", ".join(eq_strs)
+                else:
+                    score_data["equipment"] = "None equipped"
 
-    if score_data:
-        update_player_md(score_data)
-    if room_data:
-        update_world_md(room_data)
+            elif cmd == "inventory" or "you are carrying:" in out.lower():
+                lines = [l.strip() for l in out.splitlines() if l.strip()]
+                inv_items = []
+                for line in lines:
+                    if line.lower().startswith("you are carrying:") or "H " in line and "V " in line:
+                        continue
+                    if line.strip().lower() == "nothing.":
+                        continue
+                    inv_items.append(line.strip())
+                
+                if inv_items:
+                    from collections import Counter
+                    counts = Counter(inv_items)
+                    inv_strs = []
+                    for item, count in counts.items():
+                        if count > 1:
+                            inv_strs.append(f"{count}x {item}")
+                        else:
+                            inv_strs.append(item)
+                    score_data["inventory"] = ", ".join(inv_strs)
+                else:
+                    score_data["inventory"] = "Empty"
+
+            # Parse look / room
+            elif cmd in ("look", "l") or "[ Exits:" in out:
+                lines = [l.strip() for l in out.splitlines() if l.strip()]
+                if lines and "[ Exits:" in out:
+                    room_title = lines[0]
+                    exits_match = re.search(r"\[ Exits:\s*([^\]]+)\s*\]", out)
+                    exits_str = exits_match.group(1).upper() if exits_match else "None"
+                    mobs_and_objs = []
+                    for line in lines[1:]:
+                        if line.startswith("[ Exits:") or "H " in line and "V " in line:
+                            continue
+                        if any(kw in line.lower() for kw in ["is here", "standing here", "guarding", "wiping flour", "mucking"]):
+                            mobs_and_objs.append(line)
+                    room_data[room_title] = {
+                        "exits": exits_str,
+                        "features": "; ".join(mobs_and_objs) if mobs_and_objs else "Clear"
+                    }
+
+        if score_data:
+            update_player_md(score_data, username)
+        if room_data:
+            update_world_md(room_data)
 
 
-def update_player_md(data: Dict[str, str]):
-    """Update stats for a specific player section inside data/player.md."""
+def update_player_md(data: Dict[str, str], username: str = None):
+    """Update stats for a specific player section inside player_<username>.md."""
     player_name = data.get("name", "Dummy").capitalize()
+    player_file = get_player_file(username)
     
     # Read current content or start with default
     content = ""
-    if os.path.exists(PLAYER_FILE):
-        with open(PLAYER_FILE, "r", encoding="utf-8") as f:
+    if os.path.exists(player_file):
+        with open(player_file, "r", encoding="utf-8") as f:
             content = f.read()
             
     if not content.strip():
-        content = DEFAULT_PLAYER_MD
+        content = get_default_player_section(username)
 
     # Split content into sections by '## '
     sections = content.split("\n## ")
@@ -394,15 +448,17 @@ def update_player_md(data: Dict[str, str]):
 
     player_sections[player_name] = sec_content
 
-    # Reconstruct player.md
+    # Reconstruct player file
     new_content = header.rstrip() + "\n"
     for name in sorted(player_sections.keys()):
+        if username and name.lower() != username.lower():
+            continue
         p_class = data.get("class", "Warrior" if name == "Dummy" else "Mage")
         m_class = re.search(r"- \*\*Class\*\*: (.*)", player_sections[name])
         sec_class = m_class.group(1).strip() if m_class else p_class
         new_content += f"\n## {name} ({sec_class})\n{player_sections[name].strip()}\n"
 
-    with open(PLAYER_FILE, "w", encoding="utf-8") as f:
+    with open(player_file, "w", encoding="utf-8") as f:
         f.write(new_content)
 
 
@@ -435,5 +491,6 @@ def update_world_md(room_data: Dict[str, Dict[str, str]]):
 
 
 if __name__ == "__main__":
-    ensure_data_files()
+    with StateLock(DATA_DIR):
+        ensure_data_files()
     print(f"[INFO] State files verified at {DATA_DIR}")

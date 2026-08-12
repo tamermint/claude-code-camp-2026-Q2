@@ -122,3 +122,7 @@ We should reuse the skill used in type 2 architecture for the agent to drive the
 - The agent kept asking for permissions for every python script it tried to run in the local directory. After asking the agent to update permissions, it started updating the global settings
 
 - The agent ended up creating a allow_python script which did not run smoothly on every iteration. Partially because agy cli has an explicit permissions module which overrides any scripting
+
+- The agent spawned the subagent that we created and was able to give it context. The subagent overwrote information from state memory but the orchestrator was able to steer the sub agent and reverted unwanted changes
+
+- The agent spawned two subagents and played the MUD game as two different players. We prompted it to maintain a shared world state memory and individual player state memory. It correctly identified race conditions for the single player state

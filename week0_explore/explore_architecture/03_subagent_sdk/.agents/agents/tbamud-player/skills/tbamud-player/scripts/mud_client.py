@@ -341,7 +341,7 @@ def main():
 
     if parse_and_update_state and res.get("success"):
         try:
-            parse_and_update_state(res["results"])
+            parse_and_update_state(res["results"], username=args.user)
         except Exception as e:
             print(f"[WARN] Failed to update state memory: {e}", file=sys.stderr)
 

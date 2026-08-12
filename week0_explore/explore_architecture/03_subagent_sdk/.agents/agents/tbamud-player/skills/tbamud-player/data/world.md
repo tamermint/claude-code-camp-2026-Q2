@@ -77,6 +77,8 @@
 
 | The Reading Room | E  | Clear |
 
+| The Mages' Laboratory | W  | Clear |
+
 ## Shops & Vendors
 - **Bakery**: Danish Pastry (7c), Bread (14c), Waybread (72c)
 - **Armory**: Main Street West -> South

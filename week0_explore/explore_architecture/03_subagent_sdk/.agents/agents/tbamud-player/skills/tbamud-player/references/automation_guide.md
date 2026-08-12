@@ -45,7 +45,7 @@ CircleMUD prompts typically display vital stats in angle brackets at the bottom 
 ## 4. State Persistence & Long-Term Campaign Goals
 
 1. **State Tracking**:
-   - Check `data/player.md` to review character level, stats, active goals, and skill proficiencies.
+   - Check `data/player_<username>.md` to review character level, stats, active goals, and skill proficiencies.
    - Check `data/world.md` to plan routes to shops, guilds, safe resting spots, and mob spawns.
 2. **Campaign Goal Loop (e.g., Reach Level 7 & Defeat Target Boss)**:
    - **Phase 1 (Levels 1-3)**: Fight low-risk mobs (e.g., Fidos, stray dogs), gain EXP, loot gold. Return to shops for weapons/armor and practice skills at the guildmaster.
