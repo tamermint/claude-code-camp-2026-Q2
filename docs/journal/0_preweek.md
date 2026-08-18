@@ -142,3 +142,15 @@ We should reuse the skill used in type 2 architecture for the agent to drive the
 - One core advantage I noticed is that the directory structure gets simpler when implementing the ADK. Rather than the nest .agents/agents/... structure we can keep all the necessary scripts in the root and call the adk runner to play the game
 
 - The agent spawned two subagents upon prompting and was able to handle concurrent sessions
+
+### Technical Conclusion
+
+- Using skills as subagents definitely works for simple goals such as exploring gameplay state, updating player state and guiding player to specific world state.
+
+- Within the two subagent architectures, 03b is better suited for running concurrent sessions and check in-game player interactions and update shared world state
+
+- Use agent sdk when you want to offload agent interactions through a sdk framework. Use skills as subagent via .agents/agent when you want to explicitly control how the subagents interacts and rules they follow
+
+- One thing to note, when Gemini spawned subagents and delegated gameplay, it was able to outline goals for it subagents once I prompted it with a goal.
+
+## 4. N8N

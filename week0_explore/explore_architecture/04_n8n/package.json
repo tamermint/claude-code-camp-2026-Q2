@@ -1,0 +1,29 @@
+{
+  "name": "n8n-local",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "n8n"
+  },
+  "dependencies": {
+    "n8n": "^2.34.6",
+    "sqlite3": "^5.1.7"
+  },
+  "allowScripts": {
+    "protobufjs@7.6.5": true,
+    "protobufjs@8.0.1": true,
+    "@parcel/watcher@2.6.0": true,
+    "@scarf/scarf@1.4.0": true,
+    "@sentry/node-cpu-profiler@2.4.3": true,
+    "@sentry/node-native-stacktrace@0.5.2": true,
+    "agent-browser@0.26.0": true,
+    "cpu-features@0.0.10": true,
+    "fsevents@2.3.2": true,
+    "isolated-vm@6.2.0": true,
+    "msgpackr-extract@3.0.4": true,
+    "oracledb@6.10.0": true,
+    "sqlite3@5.1.7": true,
+    "ssh2@1.15.0": true,
+    "ssh2@1.17.0": true
+  }
+}
