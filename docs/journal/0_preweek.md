@@ -154,3 +154,19 @@ We should reuse the skill used in type 2 architecture for the agent to drive the
 - One thing to note, when Gemini spawned subagents and delegated gameplay, it was able to outline goals for it subagents once I prompted it with a goal.
 
 ## 4. N8N
+
+N8N is a workflow tool to orchestrate AI agents for multi step workflows and connect to different utilities via connectors. We can try to connect to N8N and attempt to run an AI agent to fulfill our MUD player goals
+
+### Technical Observations
+
+- Gemini agent was able to adapt the script to make it compatible for N8N tool call node however we have to create subworkflows to ensure that n8n tool call bypasses the sandbox and calls the docker container natively via shell
+
+- The n8n agent tried 4 times before failing with a response of unable to connect. This means we have to tweak the system prompt to ensure that it must not retry when there is a unable to connect error
+
+- Another thing to note, the google language model option for the agent doesn't really have an explicit tool choice option. In the first couple of tries, it did not even use the tool call. I had to tweak the system prompt to use the tool call
+
+- Also, I wasn't able to observe the failure outputs inbetween the toolcalls
+
+### Technical conclusions
+
+- N8N is good for cloud workflows though it is not the best choice for creating custom agentic loops. It may be used to create custom agentic loops but it would entail significant token expenditure and latency inbetween workflows. Caching might be used to overcome latency but it will depend on the tolerance of the solution
