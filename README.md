@@ -24,7 +24,6 @@ Few aspects of the code had to be rewritten to tolerate parsing issues. **The co
     echo "Starting batch parse..."
     .venv/bin/circlemud-parse --src "$SRC" --dest "$DEST"
   ```
-
   - `room.py` fix:
 
     ```python
