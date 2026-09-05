@@ -16,16 +16,15 @@ Few aspects of the code had to be rewritten to tolerate parsing issues. **The co
 - tbaMUD raw world files have builder typos so I had to work with gemini to fix the parser logic. The `convert-world.sh` script needed to be changed as well. My OS memory was getting exhausted due to multiple uv runs in the .venv of circlemud-world-parser.
   - `convert-world.sh` fix :
 
-  
-  ```sh
-    # Ensure environment is synced
-    uv venv --python 3.14
-    uv pip install -e .
+    ```sh
+      # Ensure environment is synced
+      uv venv --python 3.14
+      uv pip install -e .
 
-    # Execute Python exactly ONCE, passing the directories
-    echo "Starting batch parse..."
-    .venv/bin/circlemud-parse --src "$SRC" --dest "$DEST"
-  ```
+      # Execute Python exactly ONCE, passing the directories
+      echo "Starting batch parse..."
+      .venv/bin/circlemud-parse --src "$SRC" --dest "$DEST"
+    ```
   - `room.py` fix:
 
     ```python
