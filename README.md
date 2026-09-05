@@ -15,6 +15,7 @@ Few aspects of the code had to be rewritten to tolerate parsing issues. **The co
 
 - tbaMUD raw world files have builder typos so I had to work with gemini to fix the parser logic. The `convert-world.sh` script needed to be changed as well. My OS memory was getting exhausted due to multiple uv runs in the .venv of circlemud-world-parser.
   - `convert-world.sh` fix :
+
   
   ```sh
     # Ensure environment is synced
