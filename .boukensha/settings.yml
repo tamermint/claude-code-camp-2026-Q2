@@ -1,7 +1,7 @@
 tasks:
     player:
         provider: gemini # provider name (string)
-        model: gemini-3.5-flash
+        model: gemini-3.8-flash
         prompt_override:
             system: true
 mud:

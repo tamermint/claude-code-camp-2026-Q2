@@ -1,0 +1,131 @@
+# Port Plan: 00_config (Ruby to Python)
+
+This document specifies the plan to port the `00_config` subsystem from Ruby ([week1_baseline/ruby/00_config](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config)) to Python ([week1_baseline/python/00_config](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/00_config)).
+
+---
+
+## 1. Source File Analysis (Ruby Baseline)
+
+The Ruby implementation in [week1_baseline/ruby/00_config](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config) consists of the following files:
+
+| Source File | Role & Key Logic |
+| :--- | :--- |
+| [Gemfile](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/Gemfile#L1-L4) | Minimal gem dependencies: uses standard library + `gem "dotenv"` for environment variable loading. |
+| [README.md](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/README.md#L1-L132) | Architectural specification: external YAML configuration at `~/.boukensha/settings.yaml` (or overridden via `BOUKENSHA_DIR`), secret management via `.env`, per-task settings resolution, system prompt override mechanism, and MUD credentials. |
+| [lib/boukensha.rb](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/lib/boukensha.rb#L1-L3) | Top-level entry point requiring `boukensha/config` and `boukensha/tasks/player`. |
+| [lib/boukensha/config.rb](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/lib/boukensha/config.rb#L1-L95) | Core configuration loader [`Boukensha::Config`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/lib/boukensha/config.rb#L6-L94): resolves directory (`BOUKENSHA_DIR` or `~/.boukensha`), loads `.env` via `Dotenv`, parses `settings.yml` via `YAML`, provides helpers `tasks(name)`, `mud_host`, `mud_port`, `mud_username`, `mud_password`, `user_prompts_dir`, and recursive `dig(*keys)`. |
+| [lib/boukensha/tasks/base.rb](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/lib/boukensha/tasks/base.rb#L1-L61) | Abstract base class [`Boukensha::Tasks::Base`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/lib/boukensha/tasks/base.rb#L3-L60): stateless class methods `provider`, `model`, `prompt_override?`, `prompt`, `system_prompt`, reading user prompt overrides from `<user_prompts_dir>/<task_name>/<prompt_name>.md` or falling back to `<default_prompts_dir>/<prompt_name>.md`. |
+| [lib/boukensha/tasks/player.rb](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/lib/boukensha/tasks/player.rb#L1-L10) | Concrete task [`Boukensha::Tasks::Player`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/lib/boukensha/tasks/player.rb#L5-L8): inherits from `Base`, defines `self.task_name = "player"`. |
+| [prompts/system.md](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/prompts/system.md#L1-L2) | Shipped default system prompt: `"You are a MUD player assistant. Use the tools available to you to help the player explore, fight, and interact with the world."` |
+| [examples/example.rb](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/examples/example.rb#L1-L27) | Smoke test / execution harness demonstrating configuration loading, task settings resolution, MUD settings, and environment key verification. |
+| [week1_baseline/bin/00_config.sh](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/bin/00_config.sh#L1-L5) | Shell script that installs Ruby dependencies and runs `examples/example.rb`. |
+
+---
+
+## 2. Target Python Architecture & File Mapping
+
+```
+week1_baseline/
+├── bin/
+│   ├── 00_config.sh             # Ruby runner script
+│   └── 00_config_py.sh          # [NEW] Python runner script (pip install + python run)
+└── python/
+    └── 00_config/
+        ├── requirements.txt     # [NEW] pip dependencies (pyyaml, python-dotenv)
+        ├── README.md            # [NEW] Port documentation and usage instructions
+        ├── boukensha/           # [NEW] Python package root
+        │   ├── __init__.py      # Exports Config, Base, Player
+        │   ├── config.py        # boukensha.config.Config class
+        │   └── tasks/
+        │       ├── __init__.py  # Exports Base, Player
+        │       ├── base.py      # boukensha.tasks.base.Base
+        │       └── player.py    # boukensha.tasks.player.Player
+        ├── prompts/
+        │   └── system.md        # [NEW] Default system prompt shipped with library
+        └── examples/
+            └── example.py       # [NEW] Runnable verification script
+```
+
+### Detailed File-by-File Mapping
+
+| Target Python File | Source Ruby File | Porting Strategy & Key Implementation Notes |
+| :--- | :--- | :--- |
+| `requirements.txt` | [Gemfile](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/Gemfile) | Minimal pip dependencies: `pyyaml>=6.0.1` (for YAML parsing) and `python-dotenv>=1.0.1` (for `.env` loading). |
+| `boukensha/__init__.py` | [lib/boukensha.rb](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/lib/boukensha.rb) | Re-exports `Config` from `boukensha.config`, and `Base`, `Player` from `boukensha.tasks` for clean top-level imports matching Ruby: `from boukensha import Config, tasks`. |
+| `boukensha/config.py` | [lib/boukensha/config.rb](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/lib/boukensha/config.rb) | Implement `Config` class matching [`Boukensha::Config`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/lib/boukensha/config.rb#L6):<br>• `DEFAULT_DIR = Path.home() / ".boukensha"`<br>• `PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"`<br>• Directory resolution: `os.environ.get("BOUKENSHA_DIR")` or `DEFAULT_DIR`<br>• Load `.env` from `<dir>/.env` via `dotenv.load_dotenv()`<br>• Load YAML from `<dir>/settings.yml`<br>• Methods: `tasks(name=None)`, `user_prompts_dir`, `mud_host`, `mud_port`, `mud_username`, `mud_password`, `dig(*keys)`, `__repr__` and `__str__`. |
+| `boukensha/tasks/base.py` | [lib/boukensha/tasks/base.rb](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/lib/boukensha/tasks/base.rb) | Implement abstract `Base` class matching [`Boukensha::Tasks::Base`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/lib/boukensha/tasks/base.rb#L3) using `@classmethod`s:<br>• `task_name()` raising `NotImplementedError`<br>• `provider(settings: dict) -> str` (raises `ValueError` if missing)<br>• `model(settings: dict) -> str` (raises `ValueError` if missing)<br>• `prompt_override(settings: dict, prompt: str = "system") -> bool`<br>• `prompt(settings: dict, name: str = "system", user_prompts_dir: Optional[Path] = None, default_prompts_dir: Optional[Path] = None) -> Optional[str]`<br>• `system_prompt(...)` convenience helper<br>• Internal file reader helpers stripping whitespace. |
+| `boukensha/tasks/player.py` | [lib/boukensha/tasks/player.rb](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/lib/boukensha/tasks/player.rb) | Subclasses `Base` matching [`Boukensha::Tasks::Player`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/lib/boukensha/tasks/player.rb#L5), implements `@classmethod def task_name(cls) -> str: return "player"`. |
+| `prompts/system.md` | [prompts/system.md](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/prompts/system.md) | Shipped default system prompt markdown file copied to `week1_baseline/python/00_config/prompts/system.md`. |
+| `examples/example.py` | [examples/example.rb](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/examples/example.rb) | Sets `BOUKENSHA_DIR` fallback to repo `.boukensha`, instantiates `Config`, prints formatted report matching Ruby example output. |
+| `bin/00_config_py.sh` | [bin/00_config.sh](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/bin/00_config.sh) | Executable bash script installing `requirements.txt` via `pip` and running `examples/example.py`. |
+| `README.md` | [README.md](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config/README.md) | Ported documentation updated for Python syntax, package structure, and run commands. |
+
+---
+
+## 3. Implementation Details
+
+### A. Dependency Management (`requirements.txt`)
+```text
+pyyaml>=6.0.1
+python-dotenv>=1.0.1
+```
+
+### B. Configuration Loading (`boukensha/config.py`)
+- Uses `pathlib.Path` for path operations.
+- Checks strictly for `<dir>/settings.yml` (matching Ruby's `config.rb`).
+- Implements `dig(*keys)` to safely traverse nested dictionaries.
+- String representation format: `f"<Boukensha.Config dir={self.dir} tasks={','.join(self.tasks().keys())}>"`.
+
+### C. Task Classes (`boukensha/tasks/base.py` & `boukensha/tasks/player.py`)
+- Named 1:1 to Ruby: `Base` and `Player` under `boukensha.tasks`.
+- Stateless class methods via `@classmethod`.
+- Missing required keys (`provider`, `model`) raise `ValueError(f"tasks.{cls.task_name()}.provider is required in settings.yml")`.
+- Prompt resolution:
+  1. Checks `prompt_override(settings, name)`
+  2. If true and user prompt file exists at `<user_prompts_dir>/<task_name>/<name>.md`, return its contents.
+  3. Otherwise, fall back to `<default_prompts_dir>/<name>.md`.
+
+---
+
+## 4. Verification Plan
+
+### Automated / Smoke Test
+Run the Python example script via the bash runner:
+```bash
+bash week1_baseline/bin/00_config_py.sh
+```
+
+### Parity Check with Ruby Output
+Compare the output of:
+```bash
+bash week1_baseline/bin/00_config.sh
+```
+against:
+```bash
+bash week1_baseline/bin/00_config_py.sh
+```
+
+Expected parity checklist:
+1. `Config dir` matches the resolved `.boukensha` path.
+2. `Tasks` outputs `player`.
+3. `Provider` outputs `gemini`.
+4. `Model` outputs `gemini-3.8-flash`.
+5. `Prompt override?` outputs `true`.
+6. `System prompt` matches the overridden system prompt in [.boukensha/prompts/player/system.md](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/.boukensha/prompts/player/system.md).
+7. `MUD host` outputs `localhost:4000`.
+8. `MUD user` outputs `dummy`.
+9. `API key set?` detects `GEMINI_API_KEY` from `.env`.
+
+---
+
+## 5. Confirmed Design Decisions
+
+> [!NOTE]
+> The following decisions have been confirmed by the user:
+
+1. **Packaging & Dependency Management**: Using `pip` + `requirements.txt` with `pyyaml>=6.0.1` and `python-dotenv>=1.0.1`.
+2. **Class & Task Naming**: 1:1 match to Ruby: `boukensha.tasks.Base` and `boukensha.tasks.Player`, `boukensha.Config`.
+3. **Settings File Extension**: Specifically checking `settings.yml` (matching Ruby's `config.rb`).
+4. **Prompt File Location**: Copying `prompts/system.md` into `week1_baseline/python/00_config/prompts/system.md` to keep the Python component standalone.
+5. **Runner Script**: Creating [week1_baseline/bin/00_config_py.sh](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/bin/00_config_py.sh) alongside [week1_baseline/bin/00_config.sh](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/bin/00_config.sh).
+

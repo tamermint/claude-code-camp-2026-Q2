@@ -1,4 +1,4 @@
-## Preweek Technical Documentation
+# Preweek Technical Documentation
 
 ## Technical Goal
 
