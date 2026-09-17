@@ -1,0 +1,184 @@
+# Port Plan: 01_struct_skeleton (Ruby to Python)
+
+This document specifies the plan to port `01_struct_skeleton` from Ruby ([week1_baseline/ruby/01_struct_skeleton](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/01_struct_skeleton)) to Python ([week1_baseline/python/01_struct_skeleton](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/01_struct_skeleton)), explicitly building upon the existing Python port from [week1_baseline/python/00_config](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/00_config).
+
+---
+
+## 1. Context & Baseline Inheritance
+
+In Step 0, the configuration subsystem was already ported and validated in [week1_baseline/python/00_config](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/00_config):
+- [`boukensha.Config`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/00_config/boukensha/config.py#L11)
+- [`boukensha.tasks.Base`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/00_config/boukensha/tasks/base.py#L7)
+- [`boukensha.tasks.Player`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/00_config/boukensha/tasks/player.py#L6)
+- [`requirements.txt`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/00_config/requirements.txt)
+- [`prompts/system.md`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/00_config/prompts/system.md)
+
+Comparing [week1_baseline/ruby/00_config](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/00_config) to [week1_baseline/ruby/01_struct_skeleton](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/01_struct_skeleton), the configuration logic remains identical. The **only new components** introduced in Step 1 are the data structures representing an agent turn and tool definitions.
+
+Therefore, `week1_baseline/python/01_struct_skeleton` will:
+1. **Inherit the tested Python base** from `week1_baseline/python/00_config/` (`config.py`, `tasks/`, `requirements.txt`, `prompts/`).
+2. **Implement the Step 1 Delta**:
+   - `boukensha/tool.py` (new)
+   - `boukensha/message.py` (new)
+   - `boukensha/context.py` (new)
+   - Updated `boukensha/__init__.py` (re-exporting `Tool`, `Message`, `Context`)
+   - `examples/example.py` (new smoke-test)
+   - `README.md` (documentation)
+   - `week1_baseline/bin/python/01_struct_skeleton.sh` (new isolated runner script)
+
+---
+
+## 2. Step 1 Delta Analysis (Ruby vs Target Python)
+
+| Ruby Component in `01_struct_skeleton` | Existing in `python/00_config`? | Action for `python/01_struct_skeleton` |
+| :--- | :--- | :--- |
+| `lib/boukensha/config.rb` | Yes ([config.py](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/00_config/boukensha/config.py)) | Carry over from `python/00_config` |
+| `lib/boukensha/tasks/base.rb` | Yes ([tasks/base.py](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/00_config/boukensha/tasks/base.py)) | Carry over from `python/00_config` |
+| `lib/boukensha/tasks/player.rb` | Yes ([tasks/player.py](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/00_config/boukensha/tasks/player.py)) | Carry over from `python/00_config` |
+| `Gemfile` / `requirements.txt` | Yes ([requirements.txt](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/00_config/requirements.txt)) | Carry over from `python/00_config` |
+| `lib/boukensha/tool.rb` | **No (NEW)** | Implement [`Tool`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/01_struct_skeleton/lib/boukensha/tool.rb#L2) as a `@dataclass` in `boukensha/tool.py` |
+| `lib/boukensha/message.rb` | **No (NEW)** | Implement [`Message`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/01_struct_skeleton/lib/boukensha/message.rb#L2) as a `@dataclass` in `boukensha/message.py` |
+| `lib/boukensha/context.rb` | **No (NEW)** | Implement [`Context`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/01_struct_skeleton/lib/boukensha/context.rb#L5) class in `boukensha/context.py` |
+| `lib/boukensha.rb` | Update | Update `boukensha/__init__.py` to re-export `Tool`, `Message`, and `Context` |
+| `examples/example.rb` | **No (NEW)** | Port to `examples/example.py` matching Step 1 verification output |
+| `README.md` | **No (NEW)** | Port Step 1 documentation for Python |
+| `bin/ruby/01_struct_skeleton.sh` | **No (NEW)** | Create `bin/python/01_struct_skeleton.sh` using isolated `.venv` |
+
+---
+
+## 3. Detailed Implementation of New Components
+
+### A. `boukensha/tool.py`
+```python
+from dataclasses import dataclass, field
+from typing import Any, Callable, Optional
+
+@dataclass
+class Tool:
+    name: str
+    description: str
+    parameters: dict[str, Any] = field(default_factory=dict)
+    block: Optional[Callable[..., Any]] = None
+
+    def __str__(self) -> str:
+        param_keys = list(self.parameters.keys())
+        return f"#<Tool name={self.name} description={str(self.description)[:41]} params={param_keys}>"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+```
+
+### B. `boukensha/message.py`
+```python
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class Message:
+    role: str
+    content: str
+    tool_use_id: Optional[str] = None
+
+    def __str__(self) -> str:
+        id_tag = f" [{self.tool_use_id}]" if self.tool_use_id else ""
+        return f"#<Message role={self.role}{id_tag} content={str(self.content)[:61]}...>"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+```
+
+### C. `boukensha/context.py`
+```python
+from typing import Any, Optional
+from .tool import Tool
+from .message import Message
+
+class Context:
+    def __init__(self, task: Any, system: Optional[str] = None) -> None:
+        self.task = task
+        self.system = system
+        self.messages: list[Message] = []
+        self.tools: dict[str, Tool] = {}
+
+    def register_tool(self, tool: Tool) -> None:
+        self.tools[tool.name] = tool
+
+    def add_message(self, role: str, content: str, tool_use_id: Optional[str] = None) -> None:
+        self.messages.append(Message(role=role, content=content, tool_use_id=tool_use_id))
+
+    @property
+    def tool_count(self) -> int:
+        return len(self.tools)
+
+    @property
+    def turn_count(self) -> int:
+        return len(self.messages)
+
+    def __str__(self) -> str:
+        task_name = self.task.task_name() if hasattr(self.task, "task_name") else getattr(self.task, "task_name", None)
+        return f"#<Context task={task_name} turns={self.turn_count} tools={self.tool_count}>"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+```
+
+### D. Package Exports (`boukensha/__init__.py`)
+```python
+from .config import Config
+from . import tasks
+from .tasks import Base, Player
+from .tool import Tool
+from .message import Message
+from .context import Context
+
+__all__ = ["Config", "tasks", "Base", "Player", "Tool", "Message", "Context"]
+```
+
+### E. Isolated Virtual Environment Runner (`week1_baseline/bin/python/01_struct_skeleton.sh`)
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PYTHON_DIR="$SCRIPT_DIR/../../python/01_struct_skeleton"
+VENV_DIR="$PYTHON_DIR/.venv"
+
+cd "$PYTHON_DIR"
+
+# Ensure isolated virtual environment exists
+if [[ ! -d "$VENV_DIR" ]]; then
+    python3 -m venv "$VENV_DIR"
+fi
+
+# Install requirements strictly inside the virtual environment
+"$VENV_DIR/bin/pip" install -q -r requirements.txt
+
+# Execute example with the virtual environment's Python
+"$VENV_DIR/bin/python" examples/example.py
+```
+
+---
+
+## 4. Verification Plan
+
+### Execution
+Run both runners to verify output parity:
+```bash
+# Ruby Baseline
+bash week1_baseline/bin/ruby/01_struct_skeleton.sh
+
+# Python Port
+bash week1_baseline/bin/python/01_struct_skeleton.sh
+```
+
+### Expected Output Match
+```
+=== Boukensha Step 1: Struct Skeleton ===
+
+Config:   #<Boukensha::Config dir=/Users/.../.boukensha tasks=player>
+Context:  #<Context task=player turns=2 tools=1>
+Tool:     #<Tool name=move description=Move the player in a direction (north, so params=[:direction]>
+Messages:
+  #<Message role=user content=Explore north and tell me what you find....>
+  #<Message role=assistant content=Sure, let me head north and take a look....>
+```
