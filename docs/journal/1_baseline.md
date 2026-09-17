@@ -13,7 +13,10 @@ The architecture we are exploring here is we are utilising a custom agentic loop
 
 ## Observations
 
-### Config
+### 00_Config
 - `base.rb` is the base class which loads the settings for a specific task and then we have a `player.rb` task that is the player agent. 
-- Used Gemini to port over the code to python. Not sure why it always wants to install via the --break-system-packages flag and I need to explicitly ask it to contain it withing a .venv
+- Used Gemini to port over the code to python. Not sure why it always wants to install via the --break-system-packages flag and I need to explicitly ask it to contain it within a .venv
 - Gemini ported using `@classmethods` to exactly mirror the Ruby implementation for the tasks and base class
+
+### 01_struct_skeleton
+- 
