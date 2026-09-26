@@ -19,4 +19,5 @@ The architecture we are exploring here is we are utilising a custom agentic loop
 - Gemini ported using `@classmethods` to exactly mirror the Ruby implementation for the tasks and base class
 
 ### 01_struct_skeleton
-- 
+- While porting over to python Gemini did not consider that `00_config` was already ported and it was redoing a few steps.
+- Python's dataclass object type was chosen for the tool, message and context struct implementation in Ruby. 
