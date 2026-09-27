@@ -21,3 +21,26 @@ The architecture we are exploring here is we are utilising a custom agentic loop
 ### 01_struct_skeleton
 - While porting over to python Gemini did not consider that `00_config` was already ported and it was redoing a few steps.
 - Python's dataclass object type was chosen for the tool, message and context struct implementation in Ruby. 
+
+### 02_the_registry
+- The registry is basically a way for the agent to register or call a tool to perform player action in the tbaMUD
+- The registry is responsible for dispatching tools as well
+- Tool registration used to live in context but then we fixed it to ensure it lives in Registry : 
+```ruby
+attr_reader :tools
+
+    def initialize
+      @tools = {}
+    end
+
+    def register_tool(tool)
+      @tools[tool.name] = tool
+    end
+
+    def tool(name, description:, parameters: {}, &block)
+      tool = Tool.new(name.to_s, description, parameters, block)
+      register_tool(tool)
+      tool
+    end
+    # rest of code...
+```
