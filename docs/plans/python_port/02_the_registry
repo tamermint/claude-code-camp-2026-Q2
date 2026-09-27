@@ -1,0 +1,291 @@
+# Port Plan: 02_the_registry (Ruby to Python)
+
+This document specifies the implementation plan to port `02_the_registry` from Ruby ([week1_baseline/ruby/02_the_registry](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/02_the_registry)) to Python ([week1_baseline/python/02_the_registry](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/02_the_registry)), building directly upon the foundations established in `00_config` and `01_struct_skeleton`.
+
+---
+
+## 1. Context & Baseline Inheritance
+
+In previous steps, we ported and validated:
+- **`00_config`**: [`boukensha.Config`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/00_config/boukensha/config.py#L11), [`boukensha.tasks.Base`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/00_config/boukensha/tasks/base.py#L7), [`boukensha.tasks.Player`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/00_config/boukensha/tasks/player.py#L6), `requirements.txt`, `prompts/system.md`.
+- **`01_struct_skeleton`**: Added [`boukensha.Tool`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/01_struct_skeleton/boukensha/tool.py#L8) and [`boukensha.Message`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/01_struct_skeleton/boukensha/message.py#L8).
+
+### Architectural Refactor in Step 2: The Registry
+In `02_the_registry`, we introduce the dedicated `Registry` service:
+- **`Registry` becomes the authoritative owner of tools**:
+  - Maintains the tool catalog (`self.tools: dict[str, Tool] = {}`).
+  - Registers tools via `registry.tool(name, description, parameters, block)`.
+  - Dispatches calls via `registry.dispatch(name, args)` with argument conversion and raises `UnknownToolError` when a tool is missing.
+- **`Context` is decoupled from tools**:
+  - `Context` drops `@tools`, `tool_count`, and `register_tool`.
+  - `Context` becomes purely responsible for conversation turn state (`task`, `system`, `messages`, `add_message`, `turn_count`).
+
+---
+
+## 2. Step 2 Delta Analysis (Ruby vs Target Python)
+
+| Ruby Component in `02_the_registry` | Existing in `python/01_struct_skeleton`? | Action for `python/02_the_registry` |
+| :--- | :--- | :--- |
+| `lib/boukensha/config.rb` | Yes ([config.py](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/01_struct_skeleton/boukensha/config.py)) | Inherited from `01_struct_skeleton` |
+| `lib/boukensha/tasks/*` | Yes ([tasks/](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/01_struct_skeleton/boukensha/tasks)) | Inherited from `01_struct_skeleton` |
+| `lib/boukensha/tool.rb` | Yes ([tool.py](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/01_struct_skeleton/boukensha/tool.py)) | Inherited from `01_struct_skeleton` |
+| `lib/boukensha/message.rb` | Yes ([message.py](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/01_struct_skeleton/boukensha/message.py)) | Inherited from `01_struct_skeleton` |
+| `requirements.txt` | Yes ([requirements.txt](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/01_struct_skeleton/requirements.txt)) | Inherited from `01_struct_skeleton` |
+| `prompts/system.md` | Yes ([prompts/system.md](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/01_struct_skeleton/prompts/system.md)) | Inherited from `01_struct_skeleton` |
+| `lib/boukensha/context.rb` | Modified | **Refactor**: Remove `@tools` and `tool_count`; keep conversation state (`task`, `system`, `messages`) |
+| `lib/boukensha/errors.rb` | **No (NEW)** | **Implement**: [`UnknownToolError`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/02_the_registry/lib/boukensha/errors.rb#L2) exception in `boukensha/errors.py` |
+| `lib/boukensha/registry.rb` | **No (NEW)** | **Implement**: [`Registry`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/02_the_registry/lib/boukensha/registry.rb#L4) class in `boukensha/registry.py` |
+| `lib/boukensha.rb` | Update | Update `boukensha/__init__.py` to re-export `Registry` and `UnknownToolError` |
+| `examples/example.rb` | **No (NEW)** | Port to `examples/example.py` matching Step 2 verification output |
+| `README.md` | **No (NEW)** | Port Step 2 documentation for Python |
+| `bin/python/02_the_registry.sh` | Present | Verify that the existing runner script executes cleanly in isolated `.venv` |
+
+---
+
+## 3. Target Python Architecture & File Mapping
+
+```
+week1_baseline/
+├── bin/
+│   ├── python/
+│   │   ├── 00_config.sh
+│   │   ├── 01_struct_skeleton.sh
+│   │   └── 02_the_registry.sh       # Runner script using isolated .venv
+│   └── ruby/
+│       ├── 00_config.sh
+│       ├── 01_struct_skeleton.sh
+│       └── 02_the_registry.sh
+└── python/
+    └── 02_the_registry/
+        ├── requirements.txt         # Inherited from 01_struct_skeleton
+        ├── README.md                # [NEW] Step 2 documentation
+        ├── prompts/
+        │   └── system.md            # Shipped system prompt
+        ├── boukensha/
+        │   ├── __init__.py          # [NEW] Re-exports all components
+        │   ├── config.py            # Inherited from 01_struct_skeleton
+        │   ├── tasks/               # Inherited from 01_struct_skeleton
+        │   │   ├── __init__.py
+        │   │   ├── base.py
+        │   │   └── player.py
+        │   ├── tool.py              # Inherited from 01_struct_skeleton
+        │   ├── message.py           # Inherited from 01_struct_skeleton
+        │   ├── context.py           # [MODIFIED] Decoupled Context (conversation only)
+        │   ├── errors.py            # [NEW] UnknownToolError
+        │   └── registry.py          # [NEW] Registry class
+        └── examples/
+            └── example.py           # [NEW] Step 2 verification script
+```
+
+---
+
+## 4. Implementation Details
+
+### A. `boukensha/errors.py`
+```python
+class UnknownToolError(Exception):
+    """Raised when dispatching a tool that has not been registered."""
+    pass
+```
+
+### B. `boukensha/registry.py`
+```python
+from __future__ import annotations
+
+from typing import Any, Callable, Optional
+from .tool import Tool
+from .errors import UnknownToolError
+
+
+class Registry:
+    """Manages tool registration and execution dispatch."""
+
+    def __init__(self) -> None:
+        self.tools: dict[str, Tool] = {}
+
+    def register_tool(self, tool: Tool) -> None:
+        self.tools[tool.name] = tool
+
+    def tool(
+        self,
+        name: str,
+        description: str,
+        parameters: Optional[dict[str, Any]] = None,
+        block: Optional[Callable[..., Any]] = None,
+    ) -> Tool:
+        if parameters is None:
+            parameters = {}
+        t = Tool(name=str(name), description=description, parameters=parameters, block=block)
+        self.register_tool(t)
+        return t
+
+    def dispatch(self, name: str, args: Optional[dict[str, Any]] = None) -> Any:
+        if args is None:
+            args = {}
+        t = self.tools.get(str(name))
+        if t is None:
+            raise UnknownToolError(f"No tool registered as '{name}'")
+        if t.block is None:
+            raise ValueError(f"Tool '{name}' has no executable block")
+        return t.block(**args)
+```
+
+### C. `boukensha/context.py` (Decoupled from Tools)
+```python
+from __future__ import annotations
+
+from typing import Any, Optional
+from .message import Message
+
+
+class Context:
+    """Holds conversation state (task, system prompt, messages)."""
+
+    def __init__(self, task: Any, system: Optional[str] = None) -> None:
+        self.task = task
+        self.system = system
+        self.messages: list[Message] = []
+
+    def add_message(self, role: str, content: str, tool_use_id: Optional[str] = None) -> None:
+        self.messages.append(Message(role=role, content=content, tool_use_id=tool_use_id))
+
+    @property
+    def turn_count(self) -> int:
+        return len(self.messages)
+
+    def __str__(self) -> str:
+        task_name = self.task.task_name() if hasattr(self.task, "task_name") else getattr(self.task, "task_name", None)
+        return f"#<Context task={task_name} turns={self.turn_count}>"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+```
+
+### D. `boukensha/__init__.py`
+```python
+from .config import Config
+from . import tasks
+from .tasks import Base, Player
+from .tool import Tool
+from .message import Message
+from .context import Context
+from .errors import UnknownToolError
+from .registry import Registry
+
+__all__ = [
+    "Config",
+    "tasks",
+    "Base",
+    "Player",
+    "Tool",
+    "Message",
+    "Context",
+    "errors",
+    "UnknownToolError",
+    "Registry",
+]
+```
+
+### E. `examples/example.py`
+```python
+import os
+import sys
+from pathlib import Path
+
+# Add python/02_the_registry to sys.path so 'boukensha' can be imported without installation
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from boukensha import Config, Context, Registry, UnknownToolError, tasks
+
+# Override config directory so example works from repository root
+if "BOUKENSHA_DIR" not in os.environ:
+    repo_boukensha = Path(__file__).resolve().parents[4] / ".boukensha"
+    os.environ["BOUKENSHA_DIR"] = str(repo_boukensha)
+
+config = Config()
+player_settings = config.tasks("player")
+system_prompt = tasks.Player.system_prompt(
+    player_settings,
+    user_prompts_dir=config.user_prompts_dir,
+)
+
+ctx = Context(task=tasks.Player, system=system_prompt)
+registry = Registry()
+
+registry.tool(
+    "move",
+    description="Move the player in a direction (north, south, east, west, up, down)",
+    parameters={"direction": {"type": "string"}},
+    block=lambda direction: f"You move {direction} into a torch-lit corridor.",
+)
+
+registry.tool(
+    "shout",
+    description="Shout a message so everyone in the zone can hear it",
+    parameters={"message": {"type": "string"}},
+    block=lambda message: message.upper(),
+)
+
+print("=== BOUKENSHA Step 2: Tool Registry ===")
+print()
+print(f"Config:  {config}")
+print(f"Context: {ctx}")
+print("Tools:")
+for t in registry.tools.values():
+    print(f"  {t}")
+print()
+
+print("Dispatching 'shout' with message='dragon spotted'...")
+result = registry.dispatch("shout", {"message": "dragon spotted"})
+print(f"Result: {result}")
+print()
+
+print("Dispatching 'move' with direction='north'...")
+result = registry.dispatch("move", {"direction": "north"})
+print(f"Result: {result}")
+print()
+
+try:
+    registry.dispatch("flee")
+except UnknownToolError as e:
+    print(f"UnknownToolError caught: {e}")
+```
+
+---
+
+## 5. Environment Isolation Guarantee
+
+- No system packages will be touched or installed.
+- All execution is scoped to the isolated virtual environment managed via [week1_baseline/bin/python/02_the_registry.sh](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/bin/python/02_the_registry.sh), which creates `week1_baseline/python/02_the_registry/.venv` and installs strictly via `"$VENV_DIR/bin/pip" install -q -r requirements.txt`.
+
+---
+
+## 6. Verification Plan
+
+### Automated Run
+```bash
+# Execute Python runner
+bash week1_baseline/bin/python/02_the_registry.sh
+
+# Compare against Ruby baseline
+bash week1_baseline/bin/ruby/02_the_registry.sh
+```
+
+### Expected Output Match
+```
+=== BOUKENSHA Step 2: Tool Registry ===
+
+Config:  #<Boukensha::Config dir=... tasks=player>
+Context: #<Context task=player turns=0>
+Tools:
+  #<Tool name=move description=Move the player in a direction (north, so params=[:direction]>
+  #<Tool name=shout description=Shout a message so everyone in the zone c params=[:message]>
+
+Dispatching 'shout' with message='dragon spotted'...
+Result: DRAGON SPOTTED
+
+Dispatching 'move' with direction='north'...
+Result: You move north into a torch-lit corridor.
+
+UnknownToolError caught: No tool registered as 'flee'
+```
