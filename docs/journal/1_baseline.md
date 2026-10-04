@@ -44,3 +44,8 @@ attr_reader :tools
     end
     # rest of code...
 ```
+### 03_prompt_builder
+- Google/Gemini has their own way for tool calling, context management etc. 
+- State is managed in Boukensha and every conversation with the model is stateless. Is this efficient? Maybe for this use case but based on my initial goal, user state and context management become key when catering for long range pattern data 
+- The prompt builder is basically used to build the initial prompt, set the system instruction while conversing with the agent
+
