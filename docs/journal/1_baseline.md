@@ -49,3 +49,5 @@ attr_reader :tools
 - State is managed in Boukensha and every conversation with the model is stateless. Is this efficient? Maybe for this use case but based on my initial goal, user state and context management become key when catering for long range pattern data 
 - The prompt builder is basically used to build the initial prompt, set the system instruction while conversing with the agent
 
+### 04_api_client
+- The client initializes the builder which retains context. The goal was to make it stateless.
