@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-PYTHON_DIR="$SCRIPT_DIR/../../python/01_struct_skeleton"
+PYTHON_DIR="$SCRIPT_DIR/../../python/03_prompt_builder"
 VENV_DIR="$ROOT_DIR/.venv"
 
 cd "$PYTHON_DIR"

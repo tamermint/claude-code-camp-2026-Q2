@@ -1,0 +1,187 @@
+# Implementation Plan: Port 03_prompt_builder from Ruby to Python
+
+## Goal Description
+Port `week1_baseline/ruby/03_prompt_builder` to Python under `week1_baseline/python/03_prompt_builder`. The prompt builder serializes conversation context (system prompt, message history with roles, and registered tools) into the exact JSON API payload format expected by different LLM provider APIs (Anthropic, Gemini, OpenAI, Ollama, and Ollama Cloud) without requiring heavyweight external SDKs.
+
+The port will be fully executable via `week1_baseline/bin/python/03_prompt_builder.sh` within an isolated `.venv`, ensuring 100% output parity with `week1_baseline/bin/ruby/03_prompt_builder.sh`.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **No Global Dependencies**: Like preceding steps (`00_config`, `01_struct_skeleton`, and `02_the_registry`), all Python packages are restricted to a local `.venv` (`week1_baseline/python/03_prompt_builder/.venv`). Global python packages will never be touched or modified.
+
+> [!NOTE]
+> **Registry & Context Harmony**:
+> In Step 2, `Registry` was decoupled so that it owns tool registration and dispatch. In Step 3, `PromptBuilder` needs tool definitions to serialize schemas for the LLM. 
+> To support both decoupled usage (`registry = Registry()`) and backwards compatibility with the Ruby course baseline (`registry = Registry(ctx)` and `PromptBuilder(ctx, backend)`), our design supports:
+> 1. `Registry(context=None)`: Stores `self.tools`. If `context` is provided, syncs with `context.tools`.
+> 2. `PromptBuilder(context, backend, registry=None)`: Resolves tools from `registry.tools` if passed, or falls back to `getattr(context, "tools", {})`.
+> This guarantees clean architecture while maintaining exact script compatibility with Ruby's `example.rb`.
+
+---
+
+## Architecture Overview
+
+```mermaid
+flowchart TD
+    Config["Config (.boukensha / settings.yml)"] --> Task["Player Task (provider, model, prompts)"]
+    Task --> Context["Context (system, messages)"]
+    Context --> Registry["Registry (look, move tools)"]
+    Context --> PB["PromptBuilder"]
+    Registry --> PB
+    Backend["Backend (Gemini / Anthropic / OpenAI / Ollama / OllamaCloud)"] --> PB
+    PB --> Payload["API Payload (dict -> JSON ready for POST)"]
+```
+
+### Backend Serialization Differences
+
+| Feature | Anthropic | Gemini | OpenAI | Ollama / OllamaCloud |
+| :--- | :--- | :--- | :--- | :--- |
+| **System Prompt** | Top-level `"system"` | Top-level `"systemInstruction"` | Message with `role: "system"` | Message with `role: "system"` |
+| **Assistant Turn** | `role: "assistant"` | `role: "model"` | `role: "assistant"` | `role: "assistant"` |
+| **Tool Result** | `role: "user"` with `tool_result` content block | `role: "user"` with `functionResponse` part | `role: "tool"` with `tool_call_id` | `role: "tool"` with `tool_name` |
+| **Tools Format** | `tools: [{name, description, input_schema}]` | `tools: [{functionDeclarations: [...]}]` | `tools: [{type: "function", function: {...}}]` | `tools: [{type: "function", function: {...}}]` |
+| **Model Validation** | Against `Anthropic.MODELS` | Against `Gemini.MODELS` | Against `OpenAI.MODELS` | Against `Ollama.MODELS` / `OllamaCloud.MODELS` |
+
+---
+
+## Proposed Changes
+
+### Component 1: Environment & Base Package Setup
+
+#### [NEW] `requirements.txt`
+```text
+pyyaml>=6.0.1
+python-dotenv>=1.0.1
+```
+
+#### [NEW] `prompts/system.md`
+Default fallback system prompt:
+```markdown
+You are a MUD player assistant. Use the tools available to you to help the player explore, fight, and interact with the world.
+```
+
+#### [NEW] `boukensha/config.py`
+Carried forward from `02_the_registry` with `DEFAULT_DIR`, `PROMPTS_DIR`, `_load_env()`, `_load_settings()`, and `dig()`.
+
+#### [NEW] `boukensha/errors.py`
+Defines base and specialized errors:
+```python
+class BoukenshaError(Exception):
+    pass
+
+class UnknownToolError(BoukenshaError):
+    pass
+
+class UnsupportedModelError(BoukenshaError):
+    pass
+```
+
+#### [NEW] `boukensha/tool.py`
+Dataclass holding `name`, `description`, `parameters`, `block`, and `__call__` execution.
+
+#### [NEW] `boukensha/message.py`
+Dataclass holding `role`, `content`, and `tool_use_id`.
+
+#### [NEW] `boukensha/context.py`
+Manages `task`, `system`, `messages`, `tools`, `add_message`, and `turn_count`/`tool_count`.
+
+#### [NEW] `boukensha/registry.py`
+Manages tool definitions, decorator `@registry.tool(...)`, and dispatching. Supports optional `context` attachment.
+
+#### [NEW] `boukensha/tasks/base.py` & `boukensha/tasks/player.py`
+Manages task configuration, prompt resolution (`user_prompts_dir` / `default_prompts_dir`), `provider`, and `model`.
+
+---
+
+### Component 2: LLM Backend Hierarchy (`boukensha/backends/`)
+
+#### [NEW] `boukensha/backends/base.py`
+- Base class with `MODELS: ClassVar[dict[str, dict[str, Any]]]`.
+- Class methods: `models()`, `model_info_for(model)`, `validate_model(model)` raising `UnsupportedModelError` on unknown models.
+- Properties: `context_window`, `input_token_cost_per_million`, `output_token_cost_per_million`, `usage_unit`, `usage_level`.
+- Methods: `estimate_cost(input_tokens, output_tokens)`.
+
+#### [NEW] `boukensha/backends/gemini.py`
+- Models: `gemini-3.8-flash`, `gemini-3.5-flash`, `gemini-3.1-flash-lite`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`.
+- Endpoints: `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent` with `x-goog-api-key`.
+- Serializers: `contents` with `model` / `functionResponse`, `functionDeclarations` tool format, `systemInstruction`.
+
+#### [NEW] `boukensha/backends/anthropic.py`
+- Models: `claude-haiku-4-5`, `claude-haiku-4-5-20251001`, `claude-sonnet-4-6`, `claude-opus-4-8`.
+- Endpoints: `https://api.anthropic.com/v1/messages` with `x-api-key` and `anthropic-version: 2023-06-01`.
+- Serializers: `system` string, `messages` with `tool_result` content block, `input_schema` tool format.
+
+#### [NEW] `boukensha/backends/openai.py`
+- Models: `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`.
+- Endpoints: `https://api.openai.com/v1/chat/completions` with `Bearer` auth.
+- Serializers: `system` message + conversation messages with `role: "tool"`, `max_completion_tokens`, `type: "function"` tool format.
+
+#### [NEW] `boukensha/backends/ollama.py`
+- Models: `gemma4`, `gemma4:e2b`, `gemma4:e4b`, `gemma4:12b`, `gemma4:26b`, `gemma4:31b`, `qwen3:30b`, `qwen3:8b`, `deepseek-r1:8b`.
+- Endpoints: `http://localhost:11434/api/chat`.
+- Serializers: `stream: False`, system message, `role: "tool"` with `tool_name`, `type: "function"` tool format.
+
+#### [NEW] `boukensha/backends/ollama_cloud.py`
+- Models: `gemma4:31b-cloud`, `minimax-m3:cloud`, `kimi-k2.5:cloud`.
+- Endpoints: `https://ollama.com/api/chat` with `Authorization: Bearer <key>`.
+- Serializers: same format as Ollama with cloud usage tiers.
+
+#### [NEW] `boukensha/backends/__init__.py`
+Re-exports `Base`, `Anthropic`, `Gemini`, `OpenAI`, `Ollama`, and `OllamaCloud`.
+
+---
+
+### Component 3: PromptBuilder & Module Exports
+
+#### [NEW] `boukensha/prompt_builder.py`
+Delegator class taking `context`, `backend`, and optional `registry`:
+- `to_messages()`: delegates to `backend.to_messages` (handling 1-arg or 2-arg signatures).
+- `to_tools()`: delegates to `backend.to_tools(self.tools)`.
+- `to_api_payload(max_output_tokens=1024)`: delegates to `backend.to_payload(self.context, max_output_tokens)`.
+- `headers`: delegates to `backend.headers`.
+- `url`: delegates to `backend.url`.
+
+#### [NEW] `boukensha/__init__.py`
+Exports `Config`, `Context`, `Registry`, `PromptBuilder`, `Tool`, `Message`, `UnknownToolError`, `UnsupportedModelError`, and `backends`.
+
+---
+
+### Component 4: Runner & Documentation
+
+#### [NEW] `examples/example.py`
+Replicates `examples/example.rb`:
+- Initializes Config, resolves Player task settings and system prompt.
+- Builds Context, registers `look` and `move` tools.
+- Adds user turn, assistant turn, and tool result turn.
+- Resolves provider and model from settings (defaults to Gemini in `.boukensha/settings.yml`).
+- Instantiates backend and `PromptBuilder`.
+- Prints config, provider, model, and formatted JSON payload.
+
+#### [NEW] `README.md`
+Detailed documentation explaining PromptBuilder, backends, supported model tables, and usage.
+
+---
+
+## Verification Plan
+
+### Automated Parity Run
+Execute both runners and compare output line-by-line:
+```bash
+bash week1_baseline/bin/ruby/03_prompt_builder.sh > /tmp/ruby_03_out.txt
+bash week1_baseline/bin/python/03_prompt_builder.sh > /tmp/python_03_out.txt
+diff -u /tmp/ruby_03_out.txt /tmp/python_03_out.txt
+```
+*(accounting for standard JSON key formatting)*
+
+### Multi-Backend Unit Tests
+Create a test script `test_prompt_builder.py` in the isolated venv that tests each of the 5 backends:
+1. `Anthropic`: Verifies `system` top-level, `messages` format, `input_schema` tools.
+2. `Gemini`: Verifies `systemInstruction`, `contents` with `model` and `functionResponse`, `functionDeclarations`.
+3. `OpenAI`: Verifies `role: "system"`, `role: "tool"`, `type: "function"` tools.
+4. `Ollama`: Verifies `stream: False`, `host` configuration, `role: "tool"` with `tool_name`.
+5. `OllamaCloud`: Verifies cloud models and authorization headers.
+6. `UnsupportedModelError`: Confirms that invalid model names raise `UnsupportedModelError` with the list of supported models.
+7. `Cost estimation`: Confirms `estimate_cost` calculations for token and compute models.

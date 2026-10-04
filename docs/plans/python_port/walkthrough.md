@@ -64,11 +64,34 @@ Step 2 decouples tool registration and tool dispatching from `Context` into a de
 
 ---
 
-## Environment Isolation
+## Step 3: `03_prompt_builder`
+
+- **Port Plan**: [docs/plans/python_port/03_prompt_builder](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/docs/plans/python_port/03_prompt_builder)
+- **Source**: [week1_baseline/ruby/03_prompt_builder](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/03_prompt_builder)
+- **Python Port**: [week1_baseline/python/03_prompt_builder](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/03_prompt_builder)
+- **Runner Script**: [week1_baseline/bin/python/03_prompt_builder.sh](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/bin/python/03_prompt_builder.sh)
+
+### Multi-Backend Serialization Architecture
+Step 3 introduces the `PromptBuilder` abstraction and 5 concrete LLM backend serializers that convert conversation turns and tool schemas into provider-specific API payloads:
+
+| Python Component | Provider / Purpose | Distinct Payload Formatting |
+| :--- | :--- | :--- |
+| [`boukensha.PromptBuilder`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/03_prompt_builder/boukensha/prompt_builder.py#L11) | Serializer Orchestrator | Delegates `to_messages`, `to_tools`, and `to_api_payload` to the active backend. |
+| [`boukensha.backends.Gemini`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/03_prompt_builder/boukensha/backends/gemini.py#L7) | Google Gemini | `systemInstruction`, `contents` with `model` and `functionResponse`, `functionDeclarations`. |
+| [`boukensha.backends.Anthropic`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/03_prompt_builder/boukensha/backends/anthropic.py#L7) | Anthropic Claude | Top-level `system`, `tool_result` content blocks in user turns, `input_schema` tools. |
+| [`boukensha.backends.OpenAI`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/03_prompt_builder/boukensha/backends/openai.py#L7) | OpenAI Chat Completions | Initial `role: "system"` message, `role: "tool"` with `tool_call_id`, `type: "function"` tools. |
+| [`boukensha.backends.Ollama`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/03_prompt_builder/boukensha/backends/ollama.py#L7) | Local Ollama | Initial `role: "system"` message, `role: "tool"` with `tool_name`, `stream: False`. |
+| [`boukensha.backends.OllamaCloud`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/03_prompt_builder/boukensha/backends/ollama_cloud.py#L7) | Ollama Cloud | Same message schema as Ollama, cloud model table and `Authorization: Bearer <key>` header. |
+| [`boukensha.errors.UnsupportedModelError`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/03_prompt_builder/boukensha/errors.py#L14) | Model Validation | Raised if an unrecognized model name is passed to any backend constructor. |
+
+---
+
+## Environment Isolation & Shared Virtual Environment
 
 All Python implementations are strictly isolated from the global system:
-- Each subsystem provisions a local `.venv` inside its own folder (`week1_baseline/python/<step>/.venv`).
-- Dependencies from `requirements.txt` are installed exclusively inside `"$VENV_DIR/bin/pip"`.
+- All ported subsystems share the root virtual environment (`.venv/`) located at the repository root.
+- Duplicate `.venv` directories inside individual step folders have been cleaned up to prevent repository bloat.
+- Runner scripts dynamically resolve `$ROOT_DIR/.venv` and ensure requirements from `requirements.txt` are satisfied via `"$VENV_DIR/bin/pip"`.
 - Scripts execute via `"$VENV_DIR/bin/python"`.
 - `.gitignore` ignores `.venv/`, `__pycache__/`, and `*.pyc`.
 
@@ -76,35 +99,113 @@ All Python implementations are strictly isolated from the global system:
 
 ## Verification & Parity Results
 
-### Step 2 Parity Check
+### Step 3 Parity Check
 Ran Ruby baseline:
 ```bash
-bash week1_baseline/bin/ruby/02_the_registry.sh
+bash week1_baseline/bin/ruby/03_prompt_builder.sh
 ```
 
 Ran Python port:
 ```bash
-bash week1_baseline/bin/python/02_the_registry.sh
+bash week1_baseline/bin/python/03_prompt_builder.sh
 ```
 
 **Output Comparison**:
 
 ```
-=== BOUKENSHA Step 2: Tool Registry ===
+=== BOUKENSHA Step 3: Prompt Builder ===
 
-Config:  #<Boukensha::Config dir=/Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/.boukensha tasks=player>
-Context: #<Context task=player turns=0>
-Tools:
-  #<Tool name=move description=Move the player in a direction (north, so params=[:direction]>
-  #<Tool name=shout description=Shout a message so everyone in the zone c params=[:message]>
-
-Dispatching 'shout' with message='dragon spotted'...
-Result: DRAGON SPOTTED
-
-Dispatching 'move' with direction='north'...
-Result: You move north into a torch-lit corridor.
-
-UnknownToolError caught: No tool registered as 'flee'
+Config: #<Boukensha::Config dir=/Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/.boukensha tasks=player>
+Provider: gemini
+Model: gemini-3.8-flash
+{
+  "systemInstruction": {
+    "parts": [
+      {
+        "text": "You are a MUD Journey player Agent. \n\nYou are playing the MUD on behalf of the player and the player will issue you goals to complete.\n\nUse the tools available to you to help the player explore, fight, and interact with the world."
+      }
+    ]
+  },
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "I just arrived in the dungeon. What's around me, and can you move north?"
+        }
+      ]
+    },
+    {
+      "role": "model",
+      "parts": [
+        {
+          "text": "Let me take a look around first."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "functionResponse": {
+            "name": "toolu_01X",
+            "response": {
+              "content": "A damp stone corridor stretches north. Torches flicker on the walls."
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "functionDeclarations": [
+        {
+          "name": "look",
+          "description": "Look around the current room for details",
+          "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        },
+        {
+          "name": "move",
+          "description": "Move the player in a direction (north, south, east, west, up, down)",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "direction": {
+                "type": "string",
+                "description": "The direction to move"
+              }
+            },
+            "required": [
+              "direction"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "maxOutputTokens": 1024
+  }
+}
 ```
 
 The outputs are 100% identical.
+
+### Unit & Multi-Backend Validation
+Executed test suite covering all 5 backends:
+```bash
+week1_baseline/python/03_prompt_builder/.venv/bin/python week1_baseline/python/03_prompt_builder/tests/test_prompt_builder.py
+```
+**Results**:
+- `✓ Gemini backend tests passed`
+- `✓ Anthropic backend tests passed`
+- `✓ OpenAI backend tests passed`
+- `✓ Ollama backend tests passed`
+- `✓ OllamaCloud backend tests passed`
+- `✓ UnsupportedModelError validation passed`
+- `All 6 test suites passed successfully!`
