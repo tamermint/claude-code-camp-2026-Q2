@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+cd "$(dirname "$0")/../../ruby/05_agent_loop"
+bundle install
+bundle exec ruby examples/example.rb

@@ -1,0 +1,240 @@
+# Implementation Plan: Port 05_agent_loop from Ruby to Python
+
+## Goal Description
+Port [`week1_baseline/ruby/05_agent_loop`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/05_agent_loop) to Python under [`week1_baseline/python/05_agent_loop`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/05_agent_loop).
+
+The **Agent Loop** is the operational core of BOUKENSHA. Everything built prior—configuration, structs, registry, prompt builder, and HTTP client—provides the foundation. In Step 5, the `Agent` drives conversation turns in an iterative loop:
+1. Formats messages and tools, and dispatches requests to the model.
+2. Inspects normalized response stop reasons (`tool_use` vs `end_turn`).
+3. Dispatches requested tool calls via `Registry`.
+4. Injects tool results as `:tool_result` turns and continues to the next iteration.
+5. Halts on `end_turn` and returns the final synthesized response.
+6. Enforces iteration ceilings (`max_iterations`), executing a graceful wind-down call with tools disabled if the limit is reached.
+
+Execution will use the shared root `.venv` via [`week1_baseline/bin/python/05_agent_loop.sh`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/bin/python/05_agent_loop.sh).
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Gemini Thought Signature Preservation**:
+> Gemini 3 series models (e.g. `gemini-3.8-flash` configured in [`.boukensha/settings.yml`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/.boukensha/settings.yml)) enforce thought signatures during multi-turn function calling. When Gemini generates a `functionCall`, it attaches a cryptographic `thoughtSignature` to that part. On subsequent turns when the conversation history is re-sent with the tool result, Gemini's API strictly requires that the historical `functionCall` part retain its `thoughtSignature`. Omitting it triggers a fatal HTTP 400 (`"Function call is missing a thought_signature in functionCall parts"`).
+> 
+> The Python port must preserve `thought_signature` / `thoughtSignature` in `Gemini.parse_response` and re-inject it on reconstructed model turn parts in `Gemini._assistant_parts`, matching our verified Ruby fix.
+
+> [!NOTE]
+> **Stateless Client and Tool Wind-Down**:
+> `Client.call(builder, max_output_tokens=1024, tools=None)` accepts `tools`. In `Agent.run()`, default tools from the builder are used; during `Agent._wrap_up()`, `tools=[]` is explicitly passed to disable further tool calls while using the same stateless `Client` and `builder` instances.
+
+---
+
+## Architecture Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant App as example.py
+    participant Agent as Agent (Loop Orchestrator)
+    participant Builder as PromptBuilder (Context + Backend)
+    participant Client as Client (Stateless Transport)
+    participant LLM as Provider API (Gemini / Anthropic / OpenAI / Ollama)
+    participant Reg as Registry (Tool Dispatcher)
+
+    App->>Agent: run()
+    loop Until end_turn or max_iterations reached
+        Agent->>Client: call(builder, max_output_tokens)
+        Client->>Builder: url, headers, to_api_payload()
+        Client->>LLM: HTTP POST (Payload with tools & history)
+        LLM-->>Client: HTTP 200 (JSON Response)
+        Client-->>Agent: Raw response dict
+        Agent->>Builder: parse_response(response)
+        Builder-->>Agent: Normalized {stop_reason, content: [...]}
+
+        alt stop_reason == "tool_use"
+            Agent->>Agent: Record assistant message with content blocks
+            loop For each tool_use block
+                Agent->>Reg: dispatch(name, input_args)
+                Reg-->>Agent: Tool result string
+                Agent->>Agent: Record tool_result message with tool_use_id
+            end
+            Note over Agent,Builder: Repeat loop with updated conversation history
+        else stop_reason == "end_turn"
+            Agent-->>App: Return final assistant text
+        end
+    end
+
+    opt max_iterations reached
+        Agent->>Agent: Record user wrap-up directive
+        Agent->>Client: call(builder, tools=[], max_output_tokens=400)
+        Client-->>Agent: Final summary response
+        Agent-->>App: Return wind-down summary (or deterministic fallback)
+    end
+```
+
+---
+
+## Proposed Changes
+
+### Component 1: Core Foundation & Domain Errors
+
+#### [NEW] `week1_baseline/python/05_agent_loop/requirements.txt`
+```text
+pyyaml>=6.0.1
+python-dotenv>=1.0.1
+```
+
+#### [NEW] `week1_baseline/python/05_agent_loop/prompts/system.md`
+Default fallback system prompt:
+```markdown
+You are a MUD player assistant. Use the tools available to you to help the player explore, fight, and interact with the world.
+```
+
+#### [NEW] `week1_baseline/python/05_agent_loop/boukensha/errors.py`
+Add `LoopError` to existing exceptions:
+```python
+class BoukenshaError(Exception):
+    """Base exception for all Boukensha domain errors."""
+
+class UnknownToolError(BoukenshaError):
+    """Raised when attempting to invoke a tool that has not been registered."""
+
+class UnsupportedModelError(BoukenshaError):
+    """Raised when a model is not recognized by a backend."""
+
+class ApiError(BoukenshaError):
+    """Raised when an HTTP call to an LLM provider fails."""
+
+class LoopError(BoukenshaError):
+    """Raised when an agent loop encounters an unrecoverable iteration/turn issue."""
+```
+
+#### [NEW] `week1_baseline/python/05_agent_loop/boukensha/config.py`
+Standard configuration loader ported from Step 4 with `tasks()`, `mud_*`, and `dig()`.
+
+#### [NEW] `week1_baseline/python/05_agent_loop/boukensha/tool.py`, `message.py`, `context.py`, `registry.py`
+- `tool.py`: `Tool` dataclass.
+- `message.py`: `Message` dataclass with `content: Any` (supporting string text as well as structured tool blocks) and formatting string.
+- `context.py`: `Context` managing conversation turns (`add_message(role, content: Any, tool_use_id=None)`).
+- `registry.py`: `Registry` managing tool declarations and dynamic `dispatch(name, args)`.
+
+---
+
+### Component 2: Tasks Configuration
+
+#### [NEW] `week1_baseline/python/05_agent_loop/boukensha/tasks/base.py`
+Adds iteration and token ceiling configuration helpers:
+- `DEFAULT_MAX_ITERATIONS = 25`
+- `DEFAULT_MAX_OUTPUT_TOKENS = 1024`
+- `max_iterations(cls, settings) -> int`
+- `max_output_tokens(cls, settings) -> int`
+- `_integer_setting(cls, settings, key, default) -> int`
+
+#### [NEW] `week1_baseline/python/05_agent_loop/boukensha/tasks/player.py` & `tasks/__init__.py`
+`Player` task implementation inheriting from `Base`.
+
+---
+
+### Component 3: Multi-Backend Response Normalization
+
+All 5 backends implement:
+1. `to_payload(self, context, max_output_tokens=1024, tools=None)`: accepts optional explicit `tools` (e.g. `tools=[]` during wind-down).
+2. `parse_response(self, response)`: normalizes vendor-specific responses into `{ "stop_reason": "tool_use" | "end_turn", "content": [...] }`.
+3. `to_messages(self, ...)`: handles `:assistant` turns by reconstructing provider-specific model messages from normalized content blocks.
+
+#### [NEW] `week1_baseline/python/05_agent_loop/boukensha/backends/gemini.py`
+- Normalizes Gemini `functionCall` and `text` parts.
+- Captures `thoughtSignature` / `thought_signature` from response parts into normalized `tool_use` blocks.
+- In `_assistant_parts`, attaches `thoughtSignature` to reconstructed `functionCall` parts.
+
+#### [NEW] `week1_baseline/python/05_agent_loop/boukensha/backends/anthropic.py`
+- Normalizes Anthropic Messages API responses: `stop_reason == "tool_use"`.
+- Passes normalized blocks directly (native wire format match).
+
+#### [NEW] `week1_baseline/python/05_agent_loop/boukensha/backends/openai.py`
+- Normalizes `choices[0].message.tool_calls` into `tool_use` content blocks.
+- Unmarshals stringified JSON `function.arguments`.
+- In `_assistant_message`, reconstructs `tool_calls` with JSON-serialized arguments.
+
+#### [NEW] `week1_baseline/python/05_agent_loop/boukensha/backends/ollama.py` & `ollama_cloud.py`
+- Normalizes `message.tool_calls` into `tool_use` blocks (reusing function name as call id).
+- In `_assistant_message`, reconstructs Ollama tool call dictionaries.
+
+---
+
+### Component 4: PromptBuilder, Client & Agent
+
+#### [NEW] `week1_baseline/python/05_agent_loop/boukensha/prompt_builder.py`
+- `to_api_payload(max_output_tokens=1024, tools=None)`: forwards `tools` parameter to `backend.to_payload`.
+- `parse_response(response)`: delegates to `backend.parse_response(response)`.
+
+#### [NEW] `week1_baseline/python/05_agent_loop/boukensha/client.py`
+- `call(builder, max_output_tokens=1024, tools=None)`: supports optional `tools` parameter forwarded to `builder.to_api_payload()`.
+- Standard library only (`urllib.request`, `ssl`, `json`) with exponential backoff retries.
+
+#### [NEW] `week1_baseline/python/05_agent_loop/boukensha/agent.py`
+The agent loop orchestrator:
+- `MAX_ITERATIONS = 25`
+- `WRAP_UP_OUTPUT_TOKENS = 400`
+- `WRAP_UP_DIRECTIVE`: instructions requesting a concise wind-down summary without tool calls.
+- `__init__(context, registry, builder, client, task_settings=None, max_iterations=None, max_output_tokens=None)`
+- `run() -> str`: executes iterative turns until `end_turn` or `max_iterations`.
+- `_handle_tool_calls(content)`: appends assistant turn to context, dispatches each tool, and appends `tool_result` turns.
+- `_extract_text(content) -> str`: collects all text blocks.
+- `_wrap_up(reason) -> str`: adds wrap-up directive and dispatches tools-disabled call via `client.call(self.builder, tools=[], max_output_tokens=WRAP_UP_OUTPUT_TOKENS)`.
+- `_fallback_message(reason) -> str`: deterministic response if wind-down call fails.
+
+#### [NEW] `week1_baseline/python/05_agent_loop/boukensha/__init__.py`
+Re-exports `Config`, `Context`, `Registry`, `PromptBuilder`, `Client`, `Agent`, `Tool`, `Message`, errors, tasks, and backends.
+
+---
+
+### Component 5: Example, Documentation & Test Suite
+
+#### [NEW] `week1_baseline/python/05_agent_loop/examples/example.py`
+Python equivalent of `examples/example.rb`:
+- Sets default `BOUKENSHA_DIR`.
+- Loads settings for `player` task.
+- Creates `Context`, `Registry`, `PromptBuilder`, `Client`, and `Agent`.
+- Registers `read_file` and `list_directory` tools.
+- Adds user prompt: `"Read the README.md file and summarise what this MUD player assistant framework can do."`
+- Executes `result = agent.run()` and prints final summary.
+
+#### [NEW] `week1_baseline/python/05_agent_loop/README.md`
+Step 5 documentation explaining the agent loop, response normalization, and execution details.
+
+#### [NEW] `week1_baseline/python/05_agent_loop/tests/test_agent.py`
+Automated unit tests covering:
+1. `test_agent_immediate_text`: single-turn response without tool calls.
+2. `test_agent_tool_use_cycle`: multi-turn loop executing a mock tool and finishing on iteration 2.
+3. `test_agent_multi_tool_use`: multiple tool calls within a single model turn.
+4. `test_agent_iteration_limit_wrap_up`: triggers `_wrap_up` with `tools=[]` when `max_iterations` is reached.
+5. `test_agent_wrap_up_fallback_on_api_error`: verifies deterministic fallback message when wrap-up API call fails.
+
+---
+
+## Verification Plan
+
+### Automated Parity Check
+Execute both Ruby and Python runner scripts:
+```bash
+bash week1_baseline/bin/ruby/05_agent_loop.sh
+bash week1_baseline/bin/python/05_agent_loop.sh
+```
+
+**Parity Criteria**:
+1. Both execute iteration 1 calling `read_file({"path" => "README.md"})` / `read_file({'path': 'README.md'})`.
+2. Both dispatch the tool and inject the file contents into conversation history.
+3. In iteration 2, both successfully supply history (including Gemini's `thoughtSignature`).
+4. Both receive `end_turn` and print a complete markdown summary of the framework.
+
+### Automated Unit Tests
+Run the automated test suite in the shared root `.venv`:
+```bash
+.venv/bin/python week1_baseline/python/05_agent_loop/tests/test_agent.py
+```
+
+### Hygiene Verification
+- Verify no nested `.venv` directories were created under `week1_baseline/python/`.
+- Ensure all `__pycache__` directories are cleaned up.
+- Update [`docs/plans/python_port/walkthrough.md`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/docs/plans/python_port/walkthrough.md) with Step 5 implementation notes and parity test results.

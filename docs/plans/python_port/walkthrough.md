@@ -108,6 +108,31 @@ Step 4 introduces `Client`, the HTTP transport layer that sends requests to prov
 
 ---
 
+## Step 5: `05_agent_loop`
+
+- **Port Plan**: [docs/plans/python_port/05_agent_loop](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/docs/plans/python_port/05_agent_loop)
+- **Source**: [week1_baseline/ruby/05_agent_loop](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/05_agent_loop)
+- **Python Port**: [week1_baseline/python/05_agent_loop](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/05_agent_loop)
+- **Runner Script**: [week1_baseline/bin/python/05_agent_loop.sh](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/bin/python/05_agent_loop.sh)
+
+### The Autonomous Agent Loop Architecture
+Step 5 brings the agent to life by introducing `Agent`:
+- **Iterative Turn Orchestrator**: Sends serialized context messages, receives normalized responses, executes tools via `Registry.dispatch()`, injects results as `:tool_result` turns, and continues iteratively until `stop_reason == "end_turn"`.
+- **Multi-Backend Response Normalization**: Every backend implements `parse_response`, mapping provider-specific responses into `{ stop_reason, content: [...] }`.
+- **Inverse Assistant Message Reconstruction**: When replaying conversation history, backends convert normalized content blocks back into provider-specific model turns (`_assistant_parts` / `_assistant_message`).
+- **Gemini Thought Signature Preservation**: Captures `thoughtSignature` / `thought_signature` from Gemini function call parts and preserves it in historical model turns, preventing HTTP 400 validation failures.
+- **Runaway Agent Safety & Wind-Down**: Enforces `max_iterations` limits per turn. On reaching the ceiling, performs a graceful wind-down call (`tools=[]`, `max_output_tokens=400`) asking for a concise summary without executing further tools.
+
+| Python Component | Ruby Equivalent | Details |
+| :--- | :--- | :--- |
+| [`boukensha.Agent`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/05_agent_loop/boukensha/agent.py#L12) | `Boukensha::Agent` | Drives iterative tool dispatch loop and wind-down calls. |
+| [`boukensha.errors.LoopError`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/05_agent_loop/boukensha/errors.py#L20) | `Boukensha::LoopError` | Error for unrecoverable turn loop conditions. |
+| [`boukensha.backends.Gemini`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/05_agent_loop/boukensha/backends/gemini.py#L10) | `Boukensha::Backends::Gemini` | Normalizes function calls and preserves `thoughtSignature`. |
+| [`boukensha.tasks.Base`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/05_agent_loop/boukensha/tasks/base.py#L7) | `Boukensha::Tasks::Base` | Manages `max_iterations` and `max_output_tokens` task settings. |
+| [`examples/example.py`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/05_agent_loop/examples/example.py) | `examples/example.rb` | Registers file reading tools and prompts agent to summarize the framework README. |
+
+---
+
 ## Environment Isolation & Shared Virtual Environment
 
 All Python implementations are strictly isolated from the global system:
@@ -282,4 +307,35 @@ Executed automated client test suite:
 - `✓ test_client_exhausted_retries passed`
 - `✓ test_client_transient_network_error passed`
 - `All 5 Client tests passed successfully!`
+
+### Step 5 Parity Check
+Ran Ruby baseline:
+```bash
+bash week1_baseline/bin/ruby/05_agent_loop.sh
+```
+
+Ran Python port:
+```bash
+bash week1_baseline/bin/python/05_agent_loop.sh
+```
+
+**Output Comparison**:
+Both runners execute the identical autonomous agent tool loop against live Gemini (`gemini-3.8-flash`):
+1. **Iteration 1**: Gemini emits `functionCall` to `read_file` with `path: "README.md"`, along with a cryptographic `thoughtSignature`. The tool is executed on disk and its result injected into conversation history.
+2. **Iteration 2**: The full conversation history (with `thoughtSignature` preserved on the model turn) is supplied back to the model. Gemini finishes with `finishReason: "STOP"`, emitting no further tool calls (`stop_reason == "end_turn"`). Both runners output the markdown summary of the BOUKENSHA framework.
+
+### Step 5 Unit Tests
+Executed automated agent test suite:
+```bash
+.venv/bin/python week1_baseline/python/05_agent_loop/tests/test_agent.py
+```
+**Results**:
+- `✓ test_agent_immediate_text passed`
+- `✓ test_agent_tool_use_cycle passed`
+- `✓ test_agent_multi_tool_use passed`
+- `✓ test_agent_iteration_limit_wrap_up passed`
+- `✓ test_agent_wrap_up_fallback_on_api_error passed`
+- `✓ test_gemini_thought_signature_preservation passed`
+- `All 6 Agent tests passed successfully!`
+
 

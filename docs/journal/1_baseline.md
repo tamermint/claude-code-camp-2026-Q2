@@ -66,8 +66,47 @@ attr_reader :tools
 - And in `example.rb`:
 
  ```diff
-  + client  = Boukensha::Client.new
+  + client  = Boukensha::Client.new 
   + response = client.call(builder)
   - client  = Boukensha::Client.new(builder)
   - response = client.call
  ```
+### 05_agent_loop
+- Due to the change in stateless client design implemented in `04_api_client`, we had introduce changes to the `agent.rb`:
+ ```diff
+  + response = @client.call(@builder, **call_opts)
+  - response = @client.call(@builder, **call_opts)
+ ```
+- Also, we got an error when running the `example.rb`:
+```zsh
+The Agent Loop is the heart of BOUKENSHA. E
+[iteration 2/25]
+boukensha/client.rb:63:in 'Boukensha::Client#call': API request failed after 1 attempt (400): { (Boukensha::ApiError)
+  "error": {
+    "code": 400,
+    "message": "Function call is missing a thought_signature in functionCall parts. This is required for tools to work correctly, and missing thought_signature may lead to degraded model performance. Additional data, function call `default_api:read_file` , position 2. Please refer to https://ai.google.dev/gemini-api/docs/thought-signatures for more details.",
+    "status": "INVALID_ARGUMENT"
+  }
+```
+- This is becausethe `tool_use` block and the `functionCall` parts were missing the `thought_signature` key so had to add them in `parse_response` and update `assistant_parts`:
+```ruby
+  sig = part["thoughtSignature"] || part            ["thought_signature"]                                                                                    
+  block["thought_signature"] = sig if sig     
+```
+```ruby
+ sig = b["thought_signature"] || b["thoughtSignature"]                                                                                          
+  part[:thoughtSignature] = sig if sig  
+```
+- Also, due to the stateless client architecture, `client.rb` had to be updated:
+```ruby
+    # rest of code...
+    def call(builder, max_output_tokens: 1024, tools: nil)
+    # rest of code...
+```
+- And also `agent.rb`:
+```ruby
+      def wrap_up(reason)
+      @context.add_message(:user, WRAP_UP_DIRECTIVE)
+      response = @client.call(@builder, tools: [], max_output_tokens: WRAP_UP_OUTPUT_TOKENS) # the tools: []
+```
+
