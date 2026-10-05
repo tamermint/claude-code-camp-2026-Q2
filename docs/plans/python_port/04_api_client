@@ -1,0 +1,150 @@
+# Implementation Plan: Port 04_api_client from Ruby to Python
+
+## Goal Description
+Port `week1_baseline/ruby/04_api_client` to Python under `week1_baseline/python/04_api_client`. The API client is responsible for executing real HTTP POST requests to provider APIs using the payload assembled by `PromptBuilder`, handling transient errors and rate limits with exponential backoff, checking response codes, and returning parsed JSON.
+
+The client is designed to be **completely stateless**, instantiated once, with the `PromptBuilder` passed as an argument to `client.call(builder)`. Execution will use the shared root `.venv` via `week1_baseline/bin/python/04_api_client.sh`.
+
+---
+
+## Architectural Refinements: Stateless Client
+
+> [!IMPORTANT]
+> **Stateless Client Architecture**:
+> In the original Ruby baseline, `Client.new(builder)` coupled the HTTP transport client to a single conversation's `PromptBuilder`. We resolved this in Ruby and carry the clean design into Python:
+> - `Client` holds only transport configuration (`max_retries`, `base_retry_delay`).
+> - `client.call(builder, max_output_tokens=1024)` receives the builder per request.
+> - A single `Client` instance can be reused across turns throughout an agent's lifecycle without state contamination.
+
+> [!NOTE]
+> **Zero Heavy External Dependencies**:
+> Like Ruby's use of standard library `net/http`, Python's `Client` utilizes standard library `urllib.request`, `ssl`, and `json`. No external HTTP libraries (such as `requests` or `httpx`) or vendor SDKs are required.
+
+---
+
+## Architecture Flow
+
+```mermaid
+sequenceDiagram
+    participant Agent as Example / Agent Loop
+    participant Builder as PromptBuilder (Context + Backend)
+    participant Client as Client (Stateless Transport)
+    participant API as LLM Endpoint (e.g. Gemini / Anthropic)
+
+    Agent->>Builder: new(Context, Backend)
+    Agent->>Client: call(Builder)
+    Client->>Builder: builder.url, builder.headers, builder.to_api_payload()
+    Client->>API: HTTP POST (with exponential backoff retries)
+    API-->>Client: HTTP 200 OK (JSON)
+    Client-->>Agent: Parsed JSON dict
+```
+
+---
+
+## Proposed Changes
+
+### Component 1: Environment & Base Package Setup
+
+#### [NEW] `requirements.txt`
+```text
+pyyaml>=6.0.1
+python-dotenv>=1.0.1
+```
+
+#### [NEW] `prompts/system.md`
+Default fallback system prompt:
+```markdown
+You are a MUD player assistant. Use the tools available to you to help the player explore, fight, and interact with the world.
+```
+
+#### [NEW] `boukensha/config.py`
+Carried forward from `03_prompt_builder` with `DEFAULT_DIR`, `PROMPTS_DIR`, `_load_env()`, `_load_settings()`, and `dig()`.
+
+#### [NEW] `boukensha/errors.py`
+Defines base and specialized errors:
+```python
+class BoukenshaError(Exception):
+    pass
+
+class UnknownToolError(BoukenshaError):
+    pass
+
+class UnsupportedModelError(BoukenshaError):
+    pass
+
+class ApiError(BoukenshaError):
+    pass
+```
+
+#### [NEW] `boukensha/tool.py`, `message.py`, `context.py`, `registry.py`
+Reused from Step 3, supporting tools, turn tracking, and decorator/block registration.
+
+#### [NEW] `boukensha/tasks/base.py`, `tasks/player.py`, `tasks/__init__.py`
+Reused from Step 3, managing task configuration and prompt overrides.
+
+#### [NEW] `boukensha/backends/` (`base.py`, `gemini.py`, `anthropic.py`, `openai.py`, `ollama.py`, `ollama_cloud.py`, `__init__.py`)
+Reused from Step 3, providing provider-specific payload schemas and headers.
+
+#### [NEW] `boukensha/prompt_builder.py`
+Reused from Step 3, providing `to_api_payload`, `headers`, and `url`.
+
+---
+
+### Component 2: API Client (`boukensha/client.py`)
+
+#### [NEW] `boukensha/client.py`
+Stateless HTTP client:
+- Constants:
+  - `RETRYABLE_STATUS_CODES = {408, 409, 429, 500, 502, 503, 504}`
+  - `MAX_RETRIES = 3`
+  - `BASE_RETRY_DELAY = 0.5`
+- Methods:
+  - `__init__(max_retries=MAX_RETRIES, base_retry_delay=BASE_RETRY_DELAY)`: stores retry policies.
+  - `call(builder, max_output_tokens=1024) -> dict[str, Any]`:
+    - Dispatches HTTP POST using `urllib.request`.
+    - Handles SSL verification via default context.
+    - Automatically retries on `TRANSIENT_EXCEPTIONS` and `RETRYABLE_STATUS_CODES` using `_retry_delay(attempt)`.
+    - Raises `ApiError` with detailed attempt count and status/response body on terminal failure.
+    - Parses and returns response JSON on HTTP 200.
+
+#### [NEW] `boukensha/__init__.py`
+Exports `Config`, `Context`, `Registry`, `PromptBuilder`, `Client`, `Tool`, `Message`, `ApiError`, `UnknownToolError`, `UnsupportedModelError`, `tasks`, and `backends`.
+
+---
+
+### Component 3: Runner & Example
+
+#### [NEW] `examples/example.py`
+Replicates `examples/example.rb`:
+- Registers `read_file` and `list_directory` tools.
+- Adds user query: `"What files are in the current directory?"`.
+- Instantiates backend (Gemini default from `.boukensha/settings.yml`).
+- Creates `PromptBuilder(ctx, backend)` and stateless `Client()`.
+- Dispatches `client.call(builder)` and pretty-prints the raw JSON candidate response.
+
+#### [NEW] `week1_baseline/bin/python/04_api_client.sh`
+Executable bash runner targeting the shared root `.venv`.
+
+#### [NEW] `README.md`
+Documentation explaining `Client`, retry policies, and sample output.
+
+---
+
+## Verification Plan
+
+### Automated Parity Check
+Execute both Ruby and Python runner scripts:
+```bash
+bash week1_baseline/bin/ruby/04_api_client.sh
+bash week1_baseline/bin/python/04_api_client.sh
+```
+Verify that both:
+1. Print identical headers and URLs (`https://generativelanguage.googleapis.com/...`).
+2. Receive a successful response from Gemini calling `list_directory` with `path: "."`.
+
+### Unit Tests (`tests/test_client.py`)
+Run automated client tests in the root `.venv`:
+1. Success: mocks HTTP 200 and validates parsed JSON output.
+2. Retry on 429 / 503: confirms exponential backoff retry before success.
+3. Fatal HTTP error (e.g. 400 Bad Request): verifies immediate `ApiError` with status code and body.
+4. Exhausted retries: confirms `ApiError` raised after `max_retries` attempts.

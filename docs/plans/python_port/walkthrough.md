@@ -86,6 +86,28 @@ Step 3 introduces the `PromptBuilder` abstraction and 5 concrete LLM backend ser
 
 ---
 
+## Step 4: `04_api_client`
+
+- **Port Plan**: [docs/plans/python_port/04_api_client](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/docs/plans/python_port/04_api_client)
+- **Source**: [week1_baseline/ruby/04_api_client](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/ruby/04_api_client)
+- **Python Port**: [week1_baseline/python/04_api_client](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/04_api_client)
+- **Runner Script**: [week1_baseline/bin/python/04_api_client.sh](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/bin/python/04_api_client.sh)
+
+### Stateless HTTP Transport Architecture
+Step 4 introduces `Client`, the HTTP transport layer that sends requests to provider endpoints and unmarshals JSON responses:
+- **Stateless Client**: Unlike the course author's initial draft that bound `Client` to a single `PromptBuilder` at initialization, `Client` is strictly stateless. It stores only retry policies (`max_retries`, `base_retry_delay`), and accepts `builder` on each `call(builder, max_output_tokens=1024)`. This allows a single `Client` instance to live across turns throughout the agent loop.
+- **Built-in Retries with Exponential Backoff**: Automatically handles transient socket errors (`TimeoutError`, `ConnectionResetError`, `ssl.SSLError`, `urllib.error.URLError`) and retryable status codes (`408, 409, 429, 500, 502, 503, 504`) with exponential delay.
+- **Zero Heavy External Dependencies**: Built with Python standard library `urllib.request`, `ssl`, and `json`.
+- **`ApiError`**: Explicit error boundary raised on terminal request failure with status code and body.
+
+| Python Component | Ruby Equivalent | Details |
+| :--- | :--- | :--- |
+| [`boukensha.Client`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/04_api_client/boukensha/client.py#L21) | `Boukensha::Client` | Stateless HTTP transport client with retry policies. |
+| [`boukensha.errors.ApiError`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/04_api_client/boukensha/errors.py#L19) | `Boukensha::ApiError` | Raised on non-2xx responses or exhausted retries. |
+| [`examples/example.py`](file:///Users/vivekmitra/Desktop/Learn2Code/Anthropic/claude-code-camp-2026-Q2/week1_baseline/python/04_api_client/examples/example.py) | `examples/example.rb` | Registers tools, creates PromptBuilder and stateless Client, dispatches live API call, and prints candidate response. |
+
+---
+
 ## Environment Isolation & Shared Virtual Environment
 
 All Python implementations are strictly isolated from the global system:
@@ -199,7 +221,7 @@ The outputs are 100% identical.
 ### Unit & Multi-Backend Validation
 Executed test suite covering all 5 backends:
 ```bash
-week1_baseline/python/03_prompt_builder/.venv/bin/python week1_baseline/python/03_prompt_builder/tests/test_prompt_builder.py
+.venv/bin/python week1_baseline/python/03_prompt_builder/tests/test_prompt_builder.py
 ```
 **Results**:
 - `✓ Gemini backend tests passed`
@@ -209,3 +231,55 @@ week1_baseline/python/03_prompt_builder/.venv/bin/python week1_baseline/python/0
 - `✓ OllamaCloud backend tests passed`
 - `✓ UnsupportedModelError validation passed`
 - `All 6 test suites passed successfully!`
+
+### Step 4 Parity Check
+Ran Ruby baseline:
+```bash
+bash week1_baseline/bin/ruby/04_api_client.sh
+```
+
+Ran Python port:
+```bash
+bash week1_baseline/bin/python/04_api_client.sh
+```
+
+**Output Comparison**:
+Both runners transmit the request to `https://generativelanguage.googleapis.com/...` and receive the exact same live candidate function call response:
+```json
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "functionCall": {
+              "name": "list_directory",
+              "args": {
+                "path": "."
+              }
+            }
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0,
+      "finishMessage": "Model generated function call(s)."
+    }
+  ]
+}
+```
+
+### Step 4 Unit Tests
+Executed automated client test suite:
+```bash
+.venv/bin/python week1_baseline/python/04_api_client/tests/test_client.py
+```
+**Results**:
+- `✓ test_client_success passed`
+- `✓ test_client_retryable_status passed`
+- `✓ test_client_fatal_http_error passed`
+- `✓ test_client_exhausted_retries passed`
+- `✓ test_client_transient_network_error passed`
+- `All 5 Client tests passed successfully!`
+

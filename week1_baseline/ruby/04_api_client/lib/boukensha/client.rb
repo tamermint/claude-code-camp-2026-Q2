@@ -18,12 +18,13 @@ module Boukensha
     MAX_RETRIES = 3
     BASE_RETRY_DELAY = 0.5
 
-    def initialize(builder)
-      @builder = builder
+    def initialize(max_retries: MAX_RETRIES, base_retry_delay: BASE_RETRY_DELAY)
+      @max_retries = max_retries
+      @base_retry_delay = base_retry_delay
     end
 
-    def call(max_output_tokens: 1024)
-      uri          = URI(@builder.url)
+    def call(builder, max_output_tokens: 1024)
+      uri          = URI(builder.url)
       http         = Net::HTTP.new(uri.host, uri.port)
       http.use_ssl = uri.scheme == "https"
       http.verify_mode = OpenSSL::SSL::VERIFY_PEER
@@ -32,8 +33,8 @@ module Boukensha
       # Omitting ca_file lets OpenSSL find system certs automatically on all platforms.
       # http.ca_file = OpenSSL::X509::DEFAULT_CERT_FILE
 
-      request      = Net::HTTP::Post.new(uri, @builder.headers)
-      request.body = @builder.to_api_payload(max_output_tokens: max_output_tokens).to_json
+      request      = Net::HTTP::Post.new(uri, builder.headers)
+      request.body = builder.to_api_payload(max_output_tokens: max_output_tokens).to_json
 
       attempts = 0
       response = nil
@@ -44,13 +45,13 @@ module Boukensha
         begin
           response = http.request(request)
         rescue *TRANSIENT_ERRORS => e
-          raise ApiError, "API request failed after #{attempts} attempts: #{e.class}: #{e.message}" if attempts > MAX_RETRIES
+          raise ApiError, "API request failed after #{attempts} attempts: #{e.class}: #{e.message}" if attempts > @max_retries
 
           sleep retry_delay(attempts)
           next
         end
 
-        if retryable_response?(response) && attempts <= MAX_RETRIES
+        if retryable_response?(response) && attempts <= @max_retries
           sleep retry_delay(attempts)
           next
         end
@@ -72,7 +73,7 @@ module Boukensha
     end
 
     def retry_delay(attempt)
-      BASE_RETRY_DELAY * (2**(attempt - 1))
+      @base_retry_delay * (2**(attempt - 1))
     end
   end
 end

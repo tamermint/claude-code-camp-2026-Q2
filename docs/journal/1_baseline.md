@@ -50,4 +50,24 @@ attr_reader :tools
 - The prompt builder is basically used to build the initial prompt, set the system instruction while conversing with the agent
 
 ### 04_api_client
-- The client initializes the builder which retains context. The goal was to make it stateless.
+- The client initializes the builder which retains context. The goal was to make it stateless. 
+- Made the following changes to ensure the client is stateless. In `client.rb`, the builder is not initialized:
+  ```diff
+
+  + def initialize(max_retries: MAX_RETRIES, base_retry_delay: BASE_RETRY_DELAY)
+  +    @max_retries = max_retries
+  +    @base_retry_delay = base_retry_delay
+  +  end
+  - def initialize(builder)
+  -    builder = @builder
+  -  end
+
+  ```
+- And in `example.rb`:
+
+ ```diff
+  + client  = Boukensha::Client.new
+  + response = client.call(builder)
+  - client  = Boukensha::Client.new(builder)
+  - response = client.call
+ ```

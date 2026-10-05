@@ -63,7 +63,7 @@ else
 end
 
 builder = Boukensha::PromptBuilder.new(ctx, backend)
-client  = Boukensha::Client.new(builder)
+client  = Boukensha::Client.new
 
 puts "=== BOUKENSHA Step 4: API Client ==="
 puts
@@ -73,6 +73,6 @@ puts "Model: #{model}"
 puts "Sending request to #{builder.url}..."
 puts
 
-response = client.call
+response = client.call(builder)
 puts "Raw response:"
 puts JSON.pretty_generate(response)
